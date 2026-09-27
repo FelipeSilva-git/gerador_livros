@@ -1,0 +1,4 @@
+# Banco com os livros e imagens (dados pessoais, fica só no computador)
+historias.db
+historias.db-journal
+__pycache__/
