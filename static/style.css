@@ -208,7 +208,44 @@ details .btn { width: 100%; margin-top: 6px; }
 /* Botões embaixo de cada metade da folha */
 .barra-lado { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
 .barra-lado .grupo { display: flex; flex-wrap: wrap; gap: 6px; }
+.barra-lado .grupo-rotulo { flex-basis: 100%; font-size: 1rem; }
 .barra-lado .btn { flex: 1 1 130px; min-height: 50px; padding: 6px 10px; font-size: 1rem; }
+
+/* ---------- Janela de sincronização ---------- */
+.janela {
+  width: min(680px, calc(100% - 24px)); max-height: calc(100% - 24px);
+  border: none; border-radius: var(--raio); padding: 24px; color: var(--texto);
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+}
+.janela::backdrop { background: rgba(28,24,20,.55); }
+.janela h2 { margin: 0 0 12px; }
+.janela .fechar { float: right; margin-left: 12px; }
+.janela .passos { font-size: 1.1rem; padding-left: 1.4em; }
+.janela .passos li { margin: 6px 0; }
+.qr { display: grid; place-items: center; margin: 12px 0; }
+.qr svg { width: min(320px, 70vw); height: auto; }
+.manual { text-align: center; font-size: 1.05rem; }
+.manual .codigo { font-size: 1.4rem; letter-spacing: 3px; }
+.estado-sync { font-size: 1.2rem; font-weight: 700; margin: 16px 0 0; }
+.acoes-sync { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.area-camera video { width: 100%; border-radius: 10px; margin-top: 12px; background: #000; }
+
+/* ---------- Celular ---------- */
+@media (max-width: 700px) {
+  body { font-size: 18px; }
+  .tela { padding: 12px 12px 60px; }
+  h1 { font-size: 1.5rem; }
+  .topo h1 { flex-basis: 100%; }
+  h2 { font-size: 1.35rem; }
+  .topo .btn { flex: 1 1 auto; }
+  .nome-livro { font-size: 1.35rem; order: -1; flex-basis: 100%; }
+  .grade-livros { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .grade-paginas { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .pagina { padding: 6px; }
+  .barra-lado { grid-template-columns: 1fr; }
+  .previa-folha { padding: 10px; }
+  .zona-envio { padding: 20px; }
+}
 
 .impressao { display: none; }
 .numero-impresso {

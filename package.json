@@ -1,0 +1,19 @@
+{
+  "name": "livrinhos-de-colorir",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monta livrinhos de colorir em A4 paisagem (PC e app Android)",
+  "scripts": {
+    "vendor": "node scripts/copiar-vendor.js",
+    "android:sync": "npm run vendor && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "jsqr": "^1.4.0",
+    "qrcode-generator": "^2.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  }
+}

@@ -12,6 +12,7 @@
     <section id="tela-livros" hidden>
       <header class="topo">
         <h1>📚 Livrinhos de Colorir</h1>
+        <button id="btn-sync" class="btn"></button>
         <button id="btn-novo-livro" class="btn primario"><span class="icone">➕</span> Novo livro</button>
       </header>
       <p id="sem-livros" class="vazio" hidden>Nenhum livro ainda. Clique em <b>+ Novo livro</b> para começar.</p>
@@ -31,7 +32,7 @@
           <label id="zona-envio" class="zona-envio">
             <input id="entrada-arquivos" type="file" accept="image/*" multiple hidden>
             <span class="icone">📥</span>
-            <strong>Arraste as imagens aqui</strong>
+            <strong id="zona-titulo">Arraste as imagens aqui</strong>
             <span>ou clique aqui para escolher. As imagens entram na ordem do nome do arquivo.<br>Dica: dê nomes com números, como <b>01</b>, <b>02</b>, <b>03</b>…</span>
           </label>
           <p id="status-envio" class="status" hidden></p>
@@ -100,6 +101,13 @@
   <!-- Área usada só na impressão -->
   <div id="impressao" class="impressao"></div>
 
+  <!-- Janela da sincronização com o celular -->
+  <dialog id="janela-sync" class="janela"></dialog>
+
+  <script src="vendor/qrcode.js"></script>
+  <script src="vendor/jsQR.js"></script>
+  <script src="armazem.js"></script>
   <script src="app.js"></script>
+  <script src="sync.js"></script>
 </body>
 </html>

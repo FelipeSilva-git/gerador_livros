@@ -2,3 +2,13 @@
 historias.db
 historias.db-journal
 __pycache__/
+node_modules/
+# gerados pelo Capacitor a cada "cap sync"
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/

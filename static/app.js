@@ -1,19 +1,6 @@
 "use strict";
 
-// ---------- API ----------
-async function api(metodo, url, corpo, cabecalhos = {}) {
-  const opcoes = { method: metodo, headers: { ...cabecalhos } };
-  if (corpo instanceof Blob) {
-    opcoes.body = corpo;
-  } else if (corpo !== undefined) {
-    opcoes.body = JSON.stringify(corpo);
-    opcoes.headers["Content-Type"] = "application/json";
-  }
-  const resp = await fetch(url, opcoes);
-  const dados = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
-  return dados;
-}
+// Os dados são lidos e gravados pelo "armazem" (armazem.js): servidor no PC, banco interno no celular.
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -24,7 +11,6 @@ function botao(icone, texto, dica, aoClicar, classe = "") {
     onclick: (e) => { e.stopPropagation(); aoClicar(); },
   }, el("span", { class: "icone" }, icone), texto);
 }
-const imagemUrl = (id, versao = 1) => `/api/paginas/${id}/imagem?v=${versao}`;
 
 function el(tag, attrs = {}, ...filhos) {
   const e = document.createElement(tag);
@@ -78,13 +64,13 @@ window.addEventListener("hashchange", roteador);
 async function mostrarLivros() {
   livroAtual = null;
   document.title = "Livrinhos de Colorir";
-  const livros = await api("GET", "/api/livros");
+  const livros = await armazem.listarLivros();
   const lista = $("#lista-livros");
   lista.replaceChildren();
   $("#sem-livros").hidden = livros.length > 0;
   for (const l of livros) {
-    const capa = l.capa_id
-      ? el("img", { src: imagemUrl(l.capa_id, l.capa_versao), alt: "" })
+    const capa = l.capa_img
+      ? el("img", { src: imagemUrl(l.capa_img), alt: "" })
       : document.createTextNode("sem páginas");
     const folhas = l.total_paginas ? Math.ceil(l.total_paginas / 4) : 0;
     lista.append(
@@ -100,13 +86,13 @@ async function mostrarLivros() {
 $("#btn-novo-livro").addEventListener("click", async () => {
   const nome = prompt("Nome do livro:");
   if (nome === null) return;
-  const livro = await api("POST", "/api/livros", { nome });
+  const livro = await armazem.criarLivro(nome);
   location.hash = `#/livro/${livro.id}`;
 });
 
 // ---------- Tela: um livro ----------
 async function abrirLivro(id) {
-  livroAtual = await api("GET", `/api/livros/${id}`);
+  livroAtual = await armazem.obterLivro(id);
   renderizarLivro();
 }
 
@@ -146,7 +132,7 @@ function renderizarPaginas() {
       marca && el("span", { class: "marca" }, marca),
       p.vazia
         ? el("div", { class: "miniatura-branca" }, "página em branco")
-        : el("img", { src: imagemUrl(p.id, p.versao), alt: p.nome, loading: "lazy" }),
+        : el("img", { src: imagemUrl(p.img_id), alt: p.nome, loading: "lazy" }),
       el("div", { class: "acoes" },
         botao("⬅️", "", "Passar esta página para antes", () => mover(i, i - 1)),
         botao("➡️", "", "Passar esta página para depois", () => mover(i, i + 1))),
@@ -208,14 +194,14 @@ async function mover(de, para) {
   livroAtual.paginas = paginas;
   renderizarPaginas();
   renderizarPrevia();
-  livroAtual = await api("PUT", `/api/livros/${livroAtual.id}/ordem`, { ids: paginas.map((x) => x.id) });
+  livroAtual = await armazem.reordenar(livroAtual.id, paginas.map((x) => x.id));
 }
 
 // Apaga só a imagem: a página fica em branco e nenhuma outra muda de lugar
 async function apagarImagem(p) {
   const num = livroAtual.paginas.indexOf(p) + 1;
   if (!confirm(`Apagar a imagem da página ${num}? A página fica em branco e as outras não mudam de lugar.`)) return;
-  await api("DELETE", `/api/paginas/${p.id}/imagem`);
+  await armazem.apagarImagem(p.id);
   await abrirLivro(livroAtual.id);
 }
 
@@ -225,7 +211,7 @@ async function removerPagina(p) {
   const ultima = num === livroAtual.paginas.length;
   const aviso = ultima ? "" : " Atenção: as páginas depois dela vão voltar uma posição.";
   if (!confirm(`Remover a página ${num} do livro?${aviso}`)) return;
-  await api("DELETE", `/api/paginas/${p.id}`);
+  await armazem.removerPagina(p.id);
   await abrirLivro(livroAtual.id);
 }
 
@@ -250,7 +236,7 @@ async function colocarNaPosicao(num, arquivo) {
 }
 
 function criarPaginaVazia() {
-  return api("POST", `/api/livros/${livroAtual.id}/paginas`, undefined, { "X-Pagina-Vazia": "1" });
+  return armazem.adicionarPagina(livroAtual.id, null);
 }
 
 $("#btn-pagina-branca").addEventListener("click", async () => {
@@ -265,10 +251,7 @@ async function trocarImagem(pagina, arquivo) {
   status.hidden = false;
   status.textContent = `Trocando a imagem da página ${num}…`;
   try {
-    await api("PUT", `/api/paginas/${pagina.id}/imagem`, arquivo, {
-      "Content-Type": arquivo.type,
-      "X-Nome-Arquivo": encodeURIComponent(arquivo.name),
-    });
+    await armazem.trocarImagem(pagina.id, arquivo);
     status.hidden = true;
   } catch (e) {
     status.textContent = `Erro ao trocar: ${e.message}`;
@@ -287,10 +270,7 @@ async function enviarArquivos(arquivos) {
   try {
     for (const [i, arq] of imagens.entries()) {
       status.textContent = `Enviando ${i + 1} de ${imagens.length}: ${arq.name}…`;
-      await api("POST", `/api/livros/${livroAtual.id}/paginas`, arq, {
-        "Content-Type": arq.type,
-        "X-Nome-Arquivo": encodeURIComponent(arq.name),
-      });
+      await armazem.adicionarPagina(livroAtual.id, arq);
     }
     status.hidden = true;
   } catch (e) {
@@ -330,7 +310,7 @@ document.addEventListener("drop", (e) => {
 
 // Configurações do livro
 async function salvar(campos) {
-  livroAtual = await api("PATCH", `/api/livros/${livroAtual.id}`, campos);
+  livroAtual = await armazem.atualizarLivro(livroAtual.id, campos);
   renderizarPaginas(); // a montagem muda onde cada página sai
   renderizarPrevia();
 }
@@ -344,7 +324,7 @@ $("#numerar").addEventListener("change", (e) => salvar({ numerar: e.target.check
 
 $("#btn-excluir-livro").addEventListener("click", async () => {
   if (!confirm(`Excluir o livro "${livroAtual.nome}" e todas as páginas? Não dá para desfazer.`)) return;
-  await api("DELETE", `/api/livros/${livroAtual.id}`);
+  await armazem.excluirLivro(livroAtual.id);
   location.hash = "#/";
 });
 
@@ -358,7 +338,7 @@ function criarLado(numeros, interativo) {
     const pagina = paginas[num - 1];
     const temImagem = pagina && !pagina.vazia;
     const metade = el("div", { class: temImagem ? "metade" : "metade branco" });
-    if (temImagem) metade.append(el("img", { src: imagemUrl(pagina.id, pagina.versao), alt: "" }));
+    if (temImagem) metade.append(el("img", { src: imagemUrl(pagina.img_id), alt: "" }));
     if (interativo) ligarMetade(metade, num, pagina, temImagem);
     else if (livroAtual.numerar) metade.append(el("span", { class: "numero-impresso" }, String(num)));
     folha.append(metade);
@@ -424,7 +404,7 @@ function ladoPrevia(titulo, numeros) {
 
 function botoesDaMetade(num) {
   const pagina = livroAtual.paginas[num - 1];
-  const grupo = el("div", { class: "grupo" });
+  const grupo = el("div", { class: "grupo" }, el("b", { class: "grupo-rotulo" }, `Pág. ${num}`));
   if (pagina && !pagina.vazia) {
     grupo.append(
       botao("🔄", "Trocar", `Trocar a imagem da página ${num}`,
@@ -456,11 +436,25 @@ async function imprimir(quais) {
   // Espera todas as imagens carregarem antes de abrir a janela de impressão
   await Promise.all([...area.querySelectorAll("img")].map((img) =>
     img.complete ? null : new Promise((ok) => { img.onload = img.onerror = ok; })));
-  window.print();
+
+  if (!NO_CELULAR) return window.print();
+  // No app do celular, a impressão é feita pelo Android (plugin Impressora do app)
+  try {
+    const cap = window.Capacitor;
+    const impressora = cap.registerPlugin ? cap.registerPlugin("Impressora") : cap.Plugins.Impressora;
+    await impressora.imprimir({ nome: livroAtual.nome });
+  } catch (e) {
+    alert("Não foi possível abrir a impressão: " + (e.message || e));
+  }
 }
 $("#btn-imprimir").addEventListener("click", () => imprimir("tudo"));
 $("#btn-frentes").addEventListener("click", () => imprimir("frentes"));
 $("#btn-versos").addEventListener("click", () => imprimir("versos"));
 window.addEventListener("afterprint", () => $("#impressao").replaceChildren());
+
+if (NO_CELULAR) {
+  document.body.classList.add("celular");
+  $("#zona-titulo").textContent = "Toque aqui para escolher as imagens";
+}
 
 roteador();

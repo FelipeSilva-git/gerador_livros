@@ -1,0 +1,11 @@
+{
+  "appId": "com.felipesilva.livrinhos",
+  "appName": "Livrinhos",
+  "webDir": "static",
+  "server": {
+    "androidScheme": "http"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
