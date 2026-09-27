@@ -12,3 +12,6 @@ android/build/
 android/app/build/
 android/local.properties
 android/capacitor-cordova-android-plugins/
+servidor.log
+instalador/instalacao.log
+instalador/desinstalacao.log

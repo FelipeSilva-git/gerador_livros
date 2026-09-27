@@ -6,11 +6,26 @@ com 4 páginas por folha (2 na frente e 2 no verso).
 Você coloca as imagens na ordem da história e o sistema calcula sozinho em qual folha
 e em qual lado cada página vai sair, pronto para imprimir.
 
-## Como usar
+## Instalar no computador (recomendado)
 
 1. Ter o [Python 3](https://www.python.org/downloads/) instalado.
-2. Dar dois cliques em **`Abrir Livrinhos.bat`** (ou rodar `python server.py`).
-3. O navegador abre em `http://localhost:8765`.
+2. Dar dois cliques em **`Instalar.bat`** e aceitar o pedido de administrador.
+
+O instalador:
+- deixa o servidor **ligando sozinho junto com o Windows**, escondido (tarefa agendada
+  como SYSTEM, que é religada se cair), então a sincronização com o celular fica sempre pronta;
+- libera a porta 8765 no firewall **só em redes privadas** (e oferece marcar a rede de casa como privada);
+- cria o ícone **Livrinhos de Colorir** na área de trabalho e no menu Iniciar, que abre
+  o sistema numa janela própria, como um app.
+
+Para tirar tudo isso, use **`Desinstalar.bat`**. Os livros (`historias.db`) não são apagados.
+Se algo der errado, veja `servidor.log` e `instalador/instalacao.log`.
+
+## Como usar
+
+1. Abrir pelo ícone **Livrinhos de Colorir** (ou, sem instalar, dar dois cliques em
+   **`Abrir Livrinhos.bat`**, que liga o servidor numa janela).
+2. O sistema abre em `http://localhost:8765`.
 4. Criar um livro, arrastar as imagens (nomes como `01.png`, `02.png`… já entram em ordem).
 5. Imprimir: **1º as frentes**, recolocar as folhas na bandeja, **2º os versos**.
 
@@ -57,4 +72,6 @@ sincronizar com o PC também serve de backup.
   - `armazem.js`: onde os dados ficam (servidor no PC, banco interno no celular)
   - `sync.js`: sincronização pelo Wi‑Fi (QR Code)
 - `android/`: projeto do app Android (Capacitor), com o plugin de impressão
+- `instalador/`: instalador do Windows (serviço, firewall e ícones) e o ícone `.ico`
 - `npm run android:sync`: copia a tela para o projeto Android
+- `node scripts/gerar-icones.mjs`: gera todos os ícones a partir de `static/icone.svg`

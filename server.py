@@ -15,6 +15,7 @@ import re
 import secrets
 import socket
 import sqlite3
+import sys
 import threading
 import time
 import uuid
@@ -201,6 +202,26 @@ def enderecos_na_rede():
     return sorted(unicos, key=lambda ip: (not ip.startswith("192.168."), not ip.startswith("10.")))
 
 
+class ServidorDuplo(ThreadingHTTPServer):
+    """Escuta IPv6 e IPv4 ao mesmo tempo ("localhost" pode ser qualquer um dos dois)."""
+    address_family = socket.AF_INET6
+
+    def server_bind(self):
+        self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        super().server_bind()
+
+
+def criar_servidor():
+    # Todas as placas de rede: o celular precisa alcançar pelo Wi-Fi.
+    # Pela rede, só as rotas de sincronização funcionam (e com o código).
+    try:
+        return ServidorDuplo(("::", PORTA), Handler)
+    except OSError as e:
+        if getattr(e, "winerror", None) == 10048 or e.errno in (98, 48):  # porta em uso
+            raise
+        return ThreadingHTTPServer(("0.0.0.0", PORTA), Handler)  # PC sem IPv6
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "Livrinhos/2.0"
 
@@ -250,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
         return re.fullmatch(padrao, self.caminho())
 
     def do_proprio_pc(self):
-        return self.client_address[0] in ("127.0.0.1", "::1")
+        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
 
     def autorizado(self):
         """O próprio PC pode tudo. Pela rede, só a sincronização com o código certo."""
@@ -589,14 +610,26 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    # --servico: roda escondido (iniciado pelo Windows ao ligar o PC), sem abrir o navegador
+    servico = "--servico" in sys.argv
+    if servico:
+        # pythonw não tem janela: erros vão para um arquivo de log
+        log = open(PASTA / "servidor.log", "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = log
+        print(time.strftime("[%Y-%m-%d %H:%M:%S] iniciando como serviço"))
     criar_tabelas()
-    # 0.0.0.0 para o celular conseguir se conectar pelo Wi-Fi.
-    # Pela rede, só as rotas de sincronização funcionam (e com o código).
-    servidor = ThreadingHTTPServer(("0.0.0.0", PORTA), Handler)
+    try:
+        servidor = criar_servidor()
+    except OSError:
+        print(f"A porta {PORTA} já está em uso: o Livrinhos já está rodando.")
+        if not servico:
+            webbrowser.open(f"http://localhost:{PORTA}")
+        sys.exit(1)
     endereco = f"http://localhost:{PORTA}"
     print(f"Livrinhos de Colorir rodando em {endereco}")
-    print("Deixe esta janela aberta enquanto usa. Para fechar, aperte Ctrl+C.")
-    threading.Timer(0.8, lambda: webbrowser.open(endereco)).start()
+    if not servico:
+        print("Deixe esta janela aberta enquanto usa. Para fechar, aperte Ctrl+C.")
+        threading.Timer(0.8, lambda: webbrowser.open(endereco)).start()
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:

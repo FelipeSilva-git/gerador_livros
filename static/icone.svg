@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="fundo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f28c4e"/>
+      <stop offset="1" stop-color="#d4561f"/>
+    </linearGradient>
+  </defs>
+  <rect id="caixa" width="512" height="512" rx="112" fill="url(#fundo)"/>
+  <g id="desenho">
+    <!-- sombra do livro -->
+    <path d="M256 170 C206 138 146 132 86 144 L86 398 C146 386 206 392 256 424 C306 392 366 386 426 398 L426 144 C366 132 306 138 256 170 Z" fill="#000" opacity=".18" transform="translate(0 12)"/>
+    <!-- páginas -->
+    <path d="M256 160 C206 128 146 122 86 134 L86 388 C146 376 206 382 256 414 Z" fill="#fff" stroke="#2b2622" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M256 160 C306 128 366 122 426 134 L426 388 C366 376 306 382 256 414 Z" fill="#fff" stroke="#2b2622" stroke-width="14" stroke-linejoin="round"/>
+    <!-- página esquerda: sol já pintado e um morrinho -->
+    <g stroke="#2b2622" stroke-width="8" stroke-linecap="round">
+      <line x1="170" y1="178" x2="170" y2="196"/>
+      <line x1="170" y1="262" x2="170" y2="280"/>
+      <line x1="119" y1="229" x2="137" y2="229"/>
+      <line x1="203" y1="229" x2="221" y2="229"/>
+      <line x1="136" y1="195" x2="147" y2="206"/>
+      <line x1="204" y1="195" x2="193" y2="206"/>
+      <line x1="136" y1="263" x2="147" y2="252"/>
+      <line x1="204" y1="263" x2="193" y2="252"/>
+    </g>
+    <circle cx="170" cy="229" r="26" fill="#ffc83d" stroke="#2b2622" stroke-width="8"/>
+    <path d="M106 352 Q150 300 196 330 Q220 318 240 332" fill="none" stroke="#2b2622" stroke-width="8" stroke-linecap="round"/>
+    <!-- página direita: estrela ainda para colorir -->
+    <path d="M338 186 L352 226 L394 227 L361 252 L373 292 L338 268 L303 292 L315 252 L282 227 L324 226 Z" fill="#fff" stroke="#2b2622" stroke-width="8" stroke-linejoin="round"/>
+    <!-- lápis de cor -->
+    <g transform="rotate(-38 392 380)">
+      <rect x="300" y="357" width="140" height="46" rx="8" fill="#3a86ff" stroke="#2b2622" stroke-width="10"/>
+      <rect x="300" y="357" width="28" height="46" fill="#2d6fd6" stroke="#2b2622" stroke-width="10"/>
+      <path d="M440 357 L486 380 L440 403 Z" fill="#f5deb3" stroke="#2b2622" stroke-width="10" stroke-linejoin="round"/>
+      <path d="M470 372 L486 380 L470 388 Z" fill="#3a86ff"/>
+    </g>
+  </g>
+</svg>
