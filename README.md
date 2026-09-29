@@ -28,6 +28,10 @@ Se algo der errado, veja `servidor.log` e `instalador/instalacao.log`.
 2. O sistema abre em `http://localhost:8765`.
 4. Criar um livro, arrastar as imagens (nomes como `01.png`, `02.png`… já entram em ordem).
 5. Imprimir: **1º as frentes**, recolocar as folhas na bandeja, **2º os versos**.
+6. **🖨️ Imprimir** em uma página imprime só ela: em folha inteira (A4 em pé, para colorir
+   avulsa) ou no tamanho do livro (meia folha, para refazer uma página que estragou).
+7. **📖 Ver livro pronto** mostra o livro em 3D: toque na página para folhear, arraste para
+   girar e use ➕/➖ (ou a roda do mouse / pinça) para aproximar.
 
 ## Montagens
 
@@ -71,6 +75,7 @@ sincronizar com o PC também serve de backup.
 - `static/`: a tela (HTML, CSS e JavaScript), usada no PC e no app
   - `armazem.js`: onde os dados ficam (servidor no PC, banco interno no celular)
   - `sync.js`: sincronização pelo Wi‑Fi (QR Code)
+  - `visualizador.js`: livro pronto em 3D
 - `android/`: projeto do app Android (Capacitor), com o plugin de impressão
 - `instalador/`: instalador do Windows (serviço, firewall e ícones) e o ícone `.ico`
 - `npm run android:sync`: copia a tela para o projeto Android

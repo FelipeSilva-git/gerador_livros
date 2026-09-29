@@ -247,6 +247,61 @@ details .btn { width: 100%; margin-top: 6px; }
   .zona-envio { padding: 20px; }
 }
 
+/* ---------- Imprimir uma página ---------- */
+.miniatura-unica { display: block; max-height: 32vh; max-width: 100%; margin: 0 auto 12px; border: 2px solid var(--borda); border-radius: 8px; background: #fff; }
+.pagina-inteira { position: relative; background: #fff; }
+.pagina-inteira img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.pagina-inteira.preencher img { object-fit: cover; }
+
+/* ---------- Livro pronto em 3D ---------- */
+.visualizador {
+  width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 12px 16px;
+  border: none; color: var(--texto);
+  background: radial-gradient(circle at 50% 35%, #fffaf2, #e6d7c3);
+}
+.visualizador[open] { display: flex; flex-direction: column; gap: 10px; }
+.visualizador::backdrop { background: #000; }
+.vis-topo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.vis-topo h2 { flex: 1; margin: 0; }
+.vis-indicador { font-size: 1.2rem; background: var(--texto); color: #fff; padding: 6px 16px; border-radius: 10px; }
+.vis-palco {
+  flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden;
+  perspective: 2200px; touch-action: none; user-select: none; cursor: grab;
+}
+.vis-palco:active { cursor: grabbing; }
+.vis-livro {
+  position: relative; width: calc(var(--pw) * 2); height: var(--ph);
+  transform-style: preserve-3d; transition: transform .6s ease;
+}
+.vis-livro.sem-animacao { transition: none; }
+/* sombra do livro sobre a "mesa" */
+.vis-livro::after {
+  content: ""; position: absolute; left: 4%; right: 4%; bottom: -7%; height: 8%;
+  background: radial-gradient(closest-side, rgba(0,0,0,.28), transparent); transform: translateZ(-4px);
+}
+.vis-folha {
+  position: absolute; left: var(--pw); top: 0; width: var(--pw); height: var(--ph);
+  transform-origin: left center; transform-style: preserve-3d;
+  transition: transform .9s cubic-bezier(.3, .1, .25, 1);
+}
+.vis-face {
+  position: absolute; inset: 0; overflow: hidden; background: #fff;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  padding: calc(var(--margem-mm, 5) / 148.5 * 100%);
+  box-shadow: inset 0 0 0 1px #d9cfc2;
+}
+.vis-face.verso { transform: rotateY(180deg); }
+.vis-face img { width: 100%; height: 100%; display: block; object-fit: contain; pointer-events: none; }
+.vis-face.preencher img { object-fit: cover; }
+/* sombra perto da dobra, para parecer papel */
+.vis-face::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+.vis-face.frente::after { background: linear-gradient(to right, rgba(0,0,0,.2), transparent 10%); }
+.vis-face.verso::after { background: linear-gradient(to left, rgba(0,0,0,.2), transparent 10%); }
+.vis-num { position: absolute; bottom: 2.5%; left: 50%; transform: translateX(-50%); font-size: .75rem; color: #555; }
+.vis-controles { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.vis-controles .btn.grande { width: auto; min-width: 170px; }
+.vis-dica { text-align: center; margin: 0; }
+
 .impressao { display: none; }
 .numero-impresso {
   position: absolute; bottom: 3mm; left: 50%; transform: translateX(-50%);
@@ -254,7 +309,6 @@ details .btn { width: 100%; margin-top: 6px; }
   background: #fff; padding: 0 2mm;
 }
 
-@page { size: A4 landscape; margin: 0; }
 
 @media print {
   body { background: #fff; }
@@ -268,4 +322,9 @@ details .btn { width: 100%; margin-top: 6px; }
     page-break-after: always;
   }
   .impressao .folha:last-child { break-after: auto; page-break-after: auto; }
+  .impressao .pagina-inteira {
+    width: 210mm;
+    height: 296.5mm; /* um fio abaixo de 297mm evita página em branco extra */
+    padding: calc(var(--margem-mm, 8) * 1mm);
+  }
 }

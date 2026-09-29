@@ -9,6 +9,8 @@
   <link rel="apple-touch-icon" href="icone-192.png">
   <meta name="theme-color" content="#e36b35">
   <link rel="stylesheet" href="style.css">
+  <!-- Orientação do papel: trocada pelo código (livro deitado, página avulsa em pé) -->
+  <style id="estilo-pagina">@page { size: A4 landscape; margin: 0; }</style>
 </head>
 <body>
   <div id="app" class="tela">
@@ -28,6 +30,7 @@
       <header class="topo">
         <a href="#/" class="btn"><span class="icone">🏠</span> Meus livros</a>
         <input id="nome-livro" class="nome-livro" aria-label="Nome do livro">
+        <button id="btn-ver-livro" class="btn primario"><span class="icone">📖</span> Ver livro pronto</button>
         <button id="btn-excluir-livro" class="btn perigo"><span class="icone">❌</span> Excluir livro</button>
       </header>
 
@@ -107,11 +110,16 @@
 
   <!-- Janela da sincronização com o celular -->
   <dialog id="janela-sync" class="janela"></dialog>
+  <!-- Janela de escolhas (ex.: imprimir uma página) -->
+  <dialog id="janela-geral" class="janela"></dialog>
+  <!-- Livro pronto em 3D -->
+  <dialog id="visualizador" class="visualizador"></dialog>
 
   <script src="vendor/qrcode.js"></script>
   <script src="vendor/jsQR.js"></script>
   <script src="armazem.js"></script>
   <script src="app.js"></script>
   <script src="sync.js"></script>
+  <script src="visualizador.js"></script>
 </body>
 </html>

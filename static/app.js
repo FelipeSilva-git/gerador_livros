@@ -142,8 +142,9 @@ function renderizarPaginas() {
           : botao("🔄", "Trocar", "Trocar a imagem desta página", () => escolherArquivo((arq) => trocarImagem(p, arq))),
         p.vazia
           ? botao("✖️", "Remover", "Tirar esta página do livro", () => removerPagina(p), "perigo")
-          : botao("🗑️", "Apagar", "Apagar a imagem (a página fica em branco)", () => apagarImagem(p), "perigo")),
-      el("div", { class: "onde", title: "Onde esta página vai ser impressa" }, "🖨️ ", onde[i + 1]));
+          : botao("🗑️", "Apagar", "Apagar a imagem (a página fica em branco)", () => apagarImagem(p), "perigo"),
+        !p.vazia && botao("🖨️", "Imprimir", "Imprimir só esta página", () => escolherImpressaoUnica(i + 1), "imprimir-uma")),
+      el("div", { class: "onde", title: "Onde esta página vai ser impressa no livro" }, "📍 ", onde[i + 1]));
     ligarArrastarPagina(item);
     lista.append(item);
   });
@@ -335,12 +336,12 @@ function criarLado(numeros, interativo) {
   const folha = el("div", { class: `folha ${ajuste}` });
   folha.style.setProperty("--margem-mm", margem_mm);
   for (const num of numeros) {
-    const pagina = paginas[num - 1];
+    const pagina = num ? paginas[num - 1] : null; // num nulo = metade vazia (impressão de uma página)
     const temImagem = pagina && !pagina.vazia;
     const metade = el("div", { class: temImagem ? "metade" : "metade branco" });
     if (temImagem) metade.append(el("img", { src: imagemUrl(pagina.img_id), alt: "" }));
     if (interativo) ligarMetade(metade, num, pagina, temImagem);
-    else if (livroAtual.numerar) metade.append(el("span", { class: "numero-impresso" }, String(num)));
+    else if (livroAtual.numerar && num) metade.append(el("span", { class: "numero-impresso" }, String(num)));
     folha.append(metade);
   }
   return folha;
@@ -430,8 +431,14 @@ async function imprimir(quais) {
     if ($("#inverter-versos").checked) lados.reverse();
   }
 
+  await mandarImprimir(lados.map((numeros) => criarLado(numeros, false)));
+}
+
+// Coloca as folhas na área de impressão e abre a impressão (PC ou Android)
+async function mandarImprimir(folhas, { retrato = false } = {}) {
   const area = $("#impressao");
-  area.replaceChildren(...lados.map((numeros) => criarLado(numeros, false)));
+  area.replaceChildren(...folhas);
+  $("#estilo-pagina").textContent = `@page { size: A4 ${retrato ? "portrait" : "landscape"}; margin: 0; }`;
 
   // Espera todas as imagens carregarem antes de abrir a janela de impressão
   await Promise.all([...area.querySelectorAll("img")].map((img) =>
@@ -442,15 +449,51 @@ async function imprimir(quais) {
   try {
     const cap = window.Capacitor;
     const impressora = cap.registerPlugin ? cap.registerPlugin("Impressora") : cap.Plugins.Impressora;
-    await impressora.imprimir({ nome: livroAtual.nome });
+    await impressora.imprimir({ nome: livroAtual.nome, retrato });
   } catch (e) {
     alert("Não foi possível abrir a impressão: " + (e.message || e));
   }
+}
+
+// ---------- Imprimir uma página só ----------
+function escolherImpressaoUnica(num) {
+  const pagina = livroAtual.paginas[num - 1];
+  const janela = $("#janela-geral");
+  const fechar = () => janela.close();
+  janela.replaceChildren(
+    el("button", { class: "btn fechar", onclick: fechar }, el("span", { class: "icone" }, "✖️"), "Fechar"),
+    el("h2", {}, `🖨️ Imprimir a página ${num}`),
+    el("img", { class: "miniatura-unica", src: imagemUrl(pagina.img_id), alt: "" }),
+    el("div", { class: "acoes-sync" },
+      botao("📄", "Folha inteira (A4 em pé)", "A página ocupa a folha toda: bom para colorir avulsa",
+        () => { fechar(); imprimirPaginaInteira(num); }, "primario grande"),
+      el("p", { class: "dica" }, "O desenho fica grande, ocupando a folha toda."),
+      botao("📖", "No tamanho do livro (meia folha)", "Sai na mesma posição que tem no livro",
+        () => { fechar(); imprimirNoTamanhoDoLivro(num); }, "grande"),
+      el("p", { class: "dica" }, "Sai igual ao livro, na mesma metade da folha. Bom para refazer uma página que estragou.")));
+  janela.showModal();
+}
+
+function imprimirPaginaInteira(num) {
+  const { paginas, ajuste, margem_mm, numerar } = livroAtual;
+  const folha = el("div", { class: `pagina-inteira ${ajuste}` });
+  folha.style.setProperty("--margem-mm", Math.max(8, margem_mm));
+  folha.append(el("img", { src: imagemUrl(paginas[num - 1].img_id), alt: "" }));
+  if (numerar) folha.append(el("span", { class: "numero-impresso" }, String(num)));
+  mandarImprimir([folha], { retrato: true });
+}
+
+function imprimirNoTamanhoDoLivro(num) {
+  // Descobre em que lado de qual folha a página fica e imprime só ela, na mesma metade
+  const { folhas } = montarFolhas(livroAtual.paginas.length, livroAtual.modo);
+  const lado = folhas.flatMap((f) => [f.frente, f.verso]).find((l) => l.includes(num));
+  mandarImprimir([criarLado(lado.map((n) => (n === num ? n : null)), false)]);
 }
 $("#btn-imprimir").addEventListener("click", () => imprimir("tudo"));
 $("#btn-frentes").addEventListener("click", () => imprimir("frentes"));
 $("#btn-versos").addEventListener("click", () => imprimir("versos"));
 window.addEventListener("afterprint", () => $("#impressao").replaceChildren());
+$("#janela-geral").addEventListener("close", () => $("#janela-geral").replaceChildren());
 
 if (NO_CELULAR) {
   document.body.classList.add("celular");
