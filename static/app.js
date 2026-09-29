@@ -389,7 +389,10 @@ function renderizarPrevia() {
   folhas.forEach((f, i) => {
     previa.append(
       el("div", { class: "previa-folha" },
-        el("h3", {}, `Folha ${i + 1}`),
+        el("div", { class: "cabecalho-folha" },
+          el("h3", {}, `Folha ${i + 1}`),
+          botao("🖨️", "Imprimir a folha (frente e verso)", `Imprimir só a folha ${i + 1}, frente e verso`,
+            () => mandarImprimir([criarLado(f.frente, false), criarLado(f.verso, false)]))),
         el("div", { class: "previa-lados" },
           ladoPrevia(`Frente: páginas ${f.frente.join(" e ")}`, f.frente),
           ladoPrevia(`Verso: páginas ${f.verso.join(" e ")}`, f.verso))));
@@ -398,7 +401,10 @@ function renderizarPrevia() {
 
 function ladoPrevia(titulo, numeros) {
   return el("figure", {},
-    el("figcaption", {}, titulo),
+    el("figcaption", {},
+      el("span", {}, titulo),
+      botao("🖨️", "Imprimir este lado", `Imprimir só este lado (${titulo.toLowerCase()})`,
+        () => mandarImprimir([criarLado(numeros, false)]))),
     criarLado(numeros, true),
     el("div", { class: "barra-lado" }, ...numeros.map(botoesDaMetade)));
 }

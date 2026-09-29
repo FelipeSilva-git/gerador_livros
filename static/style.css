@@ -173,7 +173,13 @@ details .btn { width: 100%; margin-top: 6px; }
 .previa-lados { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 1300px) { .previa-lados { grid-template-columns: 1fr; } }
 .previa-lados figure { margin: 0; }
-.previa-lados figcaption { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; }
+.previa-lados figcaption {
+  font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+}
+.previa-lados figcaption .btn, .cabecalho-folha .btn { min-height: 46px; padding: 4px 12px; font-size: 1rem; }
+.cabecalho-folha { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.cabecalho-folha h3 { margin: 0; }
 
 .folha {
   width: 100%;
