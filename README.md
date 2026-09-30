@@ -1,7 +1,12 @@
 # Livrinhos de Colorir
 
-Monta livrinhos de histórias para colorir em folhas **A4 paisagem**, dobradas ao meio,
-com 4 páginas por folha (2 na frente e 2 no verso).
+Monta livrinhos de histórias para colorir e imprime frente e verso, já na ordem certa.
+Cada livro escolhe:
+
+- **tamanho do papel**: A4, A5, A3, Carta, Ofício, Legal ou medida personalizada (mm);
+- **páginas em pé ou deitadas**;
+- **montagem**: livreto grampeado, folhas dobradas e coladas (4 páginas por folha) ou
+  folhas soltas (1 página por lado, sem dobrar).
 
 Você coloca as imagens na ordem da história e o sistema calcula sozinho em qual folha
 e em qual lado cada página vai sair, pronto para imprimir.
@@ -39,6 +44,12 @@ Se algo der errado, veja `servidor.log` e `instalador/instalacao.log`.
 |---|---|
 | **Livreto grampeado** | As folhas vão uma dentro da outra e são dobradas juntas. |
 | **Folhas dobradas e coladas** | Cada folha é dobrada sozinha e as folhas são coladas em sequência. |
+| **Folhas soltas** | Uma página de cada lado da folha, sem dobrar; grampeia na lateral. |
+
+Com folha dobrada e **páginas em pé**, a folha sai deitada com as páginas lado a lado.
+Com **páginas deitadas**, a folha sai em pé com as páginas uma em cima da outra e é dobrada
+na horizontal: o livro abre para cima, como um calendário. Na impressora frente e verso,
+use "virar na borda curta" (a tela mostra a dica certa para cada formato).
 
 ## App para celular (Android)
 

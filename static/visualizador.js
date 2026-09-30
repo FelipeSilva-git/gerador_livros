@@ -4,6 +4,8 @@
 // - Toque/clique na página da direita avança; na da esquerda volta (ou use os botões).
 // - Arrastar gira o livro; roda do mouse, pinça ou ➕/➖ dão zoom.
 // Cada folha 3D tem frente (página ímpar, à direita) e verso (página par, à esquerda).
+// Livro de páginas deitadas e dobrado abre para cima (como calendário): as folhas viram
+// em volta da borda de cima, frente embaixo e verso em cima.
 
 const vis = {
   janela: $("#visualizador"),
@@ -20,22 +22,25 @@ const VISTA_INICIAL = { zoom: 1, rx: 18, ry: 0 };
 function abrirVisualizador() {
   const { paginas, ajuste, margem_mm, numerar } = livroAtual;
   if (!paginas.length) return alert("Coloque imagens no livro primeiro.");
-  vis.paginas = Math.max(4, Math.ceil(paginas.length / 4) * 4);
+  const g = geometria();
+  vis.paginas = montarFolhas(paginas.length, livroAtual.modo).totalComBrancos; // como no impresso
   vis.total = vis.paginas / 2;
+  vis.eixo = g.dobrada && g.deitada ? "x" : "y";
+  vis.aspecto = g.pagL / g.pagA;
   vis.abertas = 0;
   Object.assign(vis, VISTA_INICIAL);
 
   const face = (num, lado) => {
     const p = paginas[num - 1];
     const f = el("div", { class: `vis-face ${lado} ${ajuste}` });
-    f.style.setProperty("--margem-mm", margem_mm);
+    f.style.setProperty("--margem-pct", `${(margem_mm / g.pagL) * 100}%`);
     if (p && !p.vazia) f.append(el("img", { src: imagemUrl(p.img_id), alt: `Página ${num}`, draggable: "false" }));
     if (numerar) f.append(el("span", { class: "vis-num" }, String(num)));
     f.dataset.lado = lado;
     return f;
   };
 
-  const livro = el("div", { class: "vis-livro" });
+  const livro = el("div", { class: `vis-livro eixo-${vis.eixo}` });
   for (let i = 0; i < vis.total; i++) {
     livro.append(el("div", { class: "vis-folha", "data-i": i },
       face(2 * i + 1, "frente"), face(2 * i + 2, "verso")));
@@ -66,13 +71,21 @@ function abrirVisualizador() {
   atualizar(false);
 }
 
-// Tamanho da página conforme o espaço da tela (proporção de meia folha A4)
+// Tamanho da página conforme o espaço da tela e a proporção da página do livro
 function medir() {
   const { width, height } = vis.palco.getBoundingClientRect();
-  const largura = Math.max(80, Math.min(width * 0.44, height * 0.78 * (148.5 / 210)));
+  let largura, altura;
+  if (vis.eixo === "y") { // páginas lado a lado
+    largura = Math.max(60, Math.min(width * 0.44, height * 0.78 * vis.aspecto));
+    altura = largura / vis.aspecto;
+  } else {                // páginas uma em cima da outra
+    altura = Math.max(40, Math.min(height * 0.4, (width * 0.8) / vis.aspecto));
+    largura = altura * vis.aspecto;
+  }
   vis.livro.style.setProperty("--pw", `${largura}px`);
-  vis.livro.style.setProperty("--ph", `${largura * (210 / 148.5)}px`);
+  vis.livro.style.setProperty("--ph", `${altura}px`);
   vis.largura = largura;
+  vis.altura = altura;
 }
 
 function atualizar(animar = true) {
@@ -82,14 +95,16 @@ function atualizar(animar = true) {
     const i = Number(f.dataset.i);
     const virada = i < abertas;
     const altura = virada ? i + 1 : total - i;
-    f.style.transform = `translateZ(${altura * 0.6}px) rotateY(${virada ? -180 : 0}deg)`;
+    const giro = vis.eixo === "y" ? `rotateY(${virada ? -180 : 0}deg)` : `rotateX(${virada ? 180 : 0}deg)`;
+    f.style.transform = `translateZ(${altura * 0.6}px) ${giro}`;
     f.classList.toggle("virada", virada);
   });
-  // Livro fechado fica centralizado: capa (só a direita) ou contracapa (só a esquerda)
-  const deslocar = abertas === 0 ? -vis.largura / 2 : abertas === total ? vis.largura / 2 : 0;
+  // Livro fechado fica centralizado: capa (só um lado) ou contracapa (só o outro)
+  const metade = vis.eixo === "y" ? vis.largura / 2 : vis.altura / 2;
+  const deslocar = abertas === 0 ? -metade : abertas === total ? metade : 0;
   livro.classList.toggle("sem-animacao", !animar);
-  livro.style.transform =
-    `scale(${vis.zoom}) rotateX(${vis.rx}deg) rotateY(${vis.ry}deg) translateX(${deslocar}px)`;
+  livro.style.transform = `scale(${vis.zoom}) rotateX(${vis.rx}deg) rotateY(${vis.ry}deg) ` +
+    (vis.eixo === "y" ? `translateX(${deslocar}px)` : `translateY(${deslocar}px)`);
 
   vis.indicador.textContent =
     abertas === 0 ? "Capa (página 1)" :
@@ -157,7 +172,11 @@ function ligarGestos(palco) {
       if (!inicio.arrastou) {
         const faceTocada = inicio.alvo.closest?.(".vis-face");
         if (faceTocada) virar(faceTocada.dataset.lado === "frente" ? 1 : -1);
-        else virar(e.clientX > palco.getBoundingClientRect().left + palco.clientWidth / 2 ? 1 : -1);
+        else {
+          const r = palco.getBoundingClientRect();
+          const depois = vis.eixo === "y" ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
+          virar(depois ? 1 : -1);
+        }
       }
       inicio = null;
     }

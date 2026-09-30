@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icone-192.png">
   <meta name="theme-color" content="#e36b35">
   <link rel="stylesheet" href="style.css">
-  <!-- Orientação do papel: trocada pelo código (livro deitado, página avulsa em pé) -->
+  <!-- Tamanho e orientação do papel: trocados pelo código na hora de imprimir -->
   <style id="estilo-pagina">@page { size: A4 landscape; margin: 0; }</style>
 </head>
 <body>
@@ -29,77 +29,129 @@
     <section id="tela-livro" hidden>
       <header class="topo">
         <a href="#/" class="btn"><span class="icone">🏠</span> Meus livros</a>
-        <input id="nome-livro" class="nome-livro" aria-label="Nome do livro">
+        <input id="nome-livro" class="nome-livro" aria-label="Nome do livro" title="Clique para mudar o nome do livro">
         <button id="btn-ver-livro" class="btn primario"><span class="icone">📖</span> Ver livro pronto</button>
-        <button id="btn-excluir-livro" class="btn perigo"><span class="icone">❌</span> Excluir livro</button>
       </header>
 
       <div class="colunas">
         <div class="principal">
-          <label id="zona-envio" class="zona-envio">
-            <input id="entrada-arquivos" type="file" accept="image/*" multiple hidden>
-            <span class="icone">📥</span>
-            <strong id="zona-titulo">Arraste as imagens aqui</strong>
-            <span>ou clique aqui para escolher. As imagens entram na ordem do nome do arquivo.<br>Dica: dê nomes com números, como <b>01</b>, <b>02</b>, <b>03</b>…</span>
-          </label>
-          <p id="status-envio" class="status" hidden></p>
 
-          <h2>📖 Sequência da história <small id="info-paginas"></small></h2>
-          <p class="explica">Deixe aqui as páginas <b>na ordem em que a história é lida</b>, do início ao fim.
-            O sistema calcula sozinho em qual folha e em qual lado (frente ou verso) cada página vai sair.</p>
-          <p class="dica">Para mudar a ordem, arraste a página ou use os botões ⬅️ e ➡️.</p>
-          <p><button id="btn-pagina-branca" class="btn pequeno"><span class="icone">📄</span> Adicionar página em branco</button></p>
-          <ol id="lista-paginas" class="grade-paginas"></ol>
+          <!-- Etapa 1: formato -->
+          <details id="etapa-formato" class="etapa">
+            <summary class="etapa-titulo">
+              <span class="etapa-num">1</span>
+              <span class="etapa-nome">Formato do livro</span>
+              <span id="resumo-formato" class="etapa-resumo"></span>
+              <span class="etapa-abrir btn"><span class="icone">✏️</span><span class="quando-fechado">Mudar formato</span><span class="quando-aberto">Fechar</span></span>
+            </summary>
+            <div class="etapa-corpo">
+              <h3>📏 Tamanho do papel</h3>
+              <div class="escolhas escolhas-papel">
+                <label class="escolha"><input type="radio" name="papel" value="A4"><b>A4</b><span>210 × 297 mm</span><small>o mais comum</small></label>
+                <label class="escolha"><input type="radio" name="papel" value="A5"><b>A5</b><span>148 × 210 mm</span><small>metade do A4</small></label>
+                <label class="escolha"><input type="radio" name="papel" value="A3"><b>A3</b><span>297 × 420 mm</span><small>dobro do A4</small></label>
+                <label class="escolha"><input type="radio" name="papel" value="carta"><b>Carta</b><span>216 × 279 mm</span></label>
+                <label class="escolha"><input type="radio" name="papel" value="oficio"><b>Ofício</b><span>216 × 330 mm</span></label>
+                <label class="escolha"><input type="radio" name="papel" value="legal"><b>Legal</b><span>216 × 356 mm</span></label>
+                <label class="escolha"><input type="radio" name="papel" value="personalizado"><b>✏️ Outro</b><span>medida que eu escolho</span></label>
+              </div>
+              <div id="papel-personalizado" class="medidas" hidden>
+                <label>Largura <input id="papel-larg" type="number" min="50" max="1000" step="1"> mm</label>
+                <span class="vezes">×</span>
+                <label>Altura <input id="papel-alt" type="number" min="50" max="1000" step="1"> mm</label>
+                <span class="dica">(medidas da folha em pé)</span>
+              </div>
 
-          <h2>🖨️ Montagem automática das folhas</h2>
-          <p class="explica">Aqui é só para conferir: o sistema já montou a frente e o verso de cada folha
-            a partir da sequência acima. <b>Não precisa organizar nada aqui.</b></p>
-          <p class="dica">Se quiser, dá para trocar ou colocar imagens por aqui também, com os botões embaixo de cada página.</p>
-          <p id="aviso-branco" class="aviso" hidden></p>
-          <div id="previa-folhas" class="previa"></div>
+              <h3>🧭 As páginas do livro ficam</h3>
+              <div class="escolhas">
+                <label class="escolha escolha-grande"><input type="radio" name="orientacao" value="retrato">
+                  <span class="desenho-pagina em-pe"></span><b>Em pé</b><span>mais altas que largas</span></label>
+                <label class="escolha escolha-grande"><input type="radio" name="orientacao" value="paisagem">
+                  <span class="desenho-pagina deitada"></span><b>Deitadas</b><span>mais largas que altas</span></label>
+              </div>
+
+              <h3>📚 Como o livro é montado</h3>
+              <div class="escolhas">
+                <label class="escolha escolha-grande"><input type="radio" name="modo" value="livreto">
+                  <span class="icone-escolha">📖</span><b>Livreto grampeado</b><span>as folhas vão uma dentro da outra e são dobradas juntas no meio</span></label>
+                <label class="escolha escolha-grande"><input type="radio" name="modo" value="empilhado">
+                  <span class="icone-escolha">📚</span><b>Folhas dobradas e coladas</b><span>cada folha é dobrada sozinha e as folhas são coladas em sequência</span></label>
+                <label class="escolha escolha-grande"><input type="radio" name="modo" value="soltas">
+                  <span class="icone-escolha">📄</span><b>Folhas soltas (sem dobrar)</b><span>uma página de cada lado da folha; depois é só grampear na lateral</span></label>
+              </div>
+
+              <h3>🖼️ Imagem na página</h3>
+              <div class="escolhas">
+                <label class="escolha"><input type="radio" name="ajuste" value="inteira"><b>Imagem inteira</b><span>não corta nada (pode sobrar espaço branco)</span></label>
+                <label class="escolha"><input type="radio" name="ajuste" value="preencher"><b>Preencher a página</b><span>ocupa tudo (pode cortar as bordas)</span></label>
+              </div>
+              <div class="linha-opcoes">
+                <label class="linha">Margem: <input id="margem" type="number" min="0" max="30" step="1"> mm</label>
+                <label class="linha"><input id="numerar" type="checkbox"> Imprimir o número da página</label>
+              </div>
+
+              <p id="resultado-formato" class="explica"></p>
+            </div>
+          </details>
+
+          <!-- Etapa 2: páginas -->
+          <section class="etapa">
+            <h2 class="etapa-titulo">
+              <span class="etapa-num">2</span>
+              <span class="etapa-nome">Páginas da história</span>
+              <span id="info-paginas" class="etapa-resumo"></span>
+            </h2>
+            <div class="etapa-corpo">
+              <label id="zona-envio" class="zona-envio">
+                <input id="entrada-arquivos" type="file" accept="image/*" multiple hidden>
+                <span class="icone">📥</span>
+                <strong id="zona-titulo">Arraste as imagens aqui</strong>
+                <span>ou clique aqui para escolher. As imagens entram na ordem do nome do arquivo.<br>Dica: dê nomes com números, como <b>01</b>, <b>02</b>, <b>03</b>…</span>
+              </label>
+              <p id="status-envio" class="status" hidden></p>
+
+              <p class="explica">Deixe as páginas <b>na ordem em que a história é lida</b>, do início ao fim.
+                O sistema calcula sozinho em qual folha e em qual lado cada página vai sair.</p>
+              <div class="barra-ferramentas">
+                <span class="dica">Para mudar a ordem: arraste a página ou use ⬅️ e ➡️.</span>
+                <button id="btn-pagina-branca" class="btn pequeno"><span class="icone">📄</span> Adicionar página em branco</button>
+              </div>
+              <ol id="lista-paginas" class="grade-paginas"></ol>
+            </div>
+          </section>
+
+          <!-- Etapa 3: conferir -->
+          <section class="etapa">
+            <h2 class="etapa-titulo">
+              <span class="etapa-num">3</span>
+              <span class="etapa-nome">Conferir as folhas</span>
+            </h2>
+            <div class="etapa-corpo">
+              <p class="explica">Veja como cada folha vai sair da impressora. <b>Não precisa organizar nada aqui</b>:
+                o sistema já montou tudo a partir da etapa 2. Se quiser, dá para imprimir só um lado ou só uma folha.</p>
+              <p id="aviso-branco" class="aviso" hidden></p>
+              <div id="previa-folhas" class="previa"></div>
+            </div>
+          </section>
         </div>
 
         <aside class="lateral">
-          <div class="cartao">
-            <h3>📖 Montagem</h3>
-            <label class="opcao">
-              <input type="radio" name="modo" value="livreto">
-              <span><b>Livreto grampeado</b><br>As folhas vão uma dentro da outra e são dobradas juntas no meio.</span>
-            </label>
-            <label class="opcao">
-              <input type="radio" name="modo" value="empilhado">
-              <span><b>Folhas dobradas e coladas</b><br>Cada folha é dobrada sozinha e depois as folhas são coladas em sequência.</span>
-            </label>
-          </div>
-
-          <div class="cartao">
-            <h3>🖼️ Imagem na página</h3>
-            <label class="opcao">
-              <input type="radio" name="ajuste" value="inteira">
-              <span><b>Imagem inteira</b><br>Não corta nada (pode sobrar espaço branco).</span>
-            </label>
-            <label class="opcao">
-              <input type="radio" name="ajuste" value="preencher">
-              <span><b>Preencher a página</b><br>Ocupa tudo (pode cortar as bordas).</span>
-            </label>
-            <label class="linha">Margem: <input id="margem" type="number" min="0" max="30" step="1"> mm</label>
-            <label class="linha"><input id="numerar" type="checkbox"> Imprimir o número da página</label>
-          </div>
-
-          <div class="cartao">
-            <h3>🖨️ Imprimir</h3>
+          <div class="cartao cartao-imprimir">
+            <h3>🖨️ Imprimir o livro</h3>
+            <p id="resumo-impressao" class="resumo-impressao"></p>
             <button id="btn-frentes" class="btn primario grande"><span class="icone">1️⃣</span> Imprimir as frentes</button>
-            <p class="dica">Depois pegue as folhas impressas e coloque de volta na bandeja, com o lado em branco para ser impresso.</p>
+            <p class="dica passo-meio">⬇️ Pegue as folhas impressas e coloque de volta na bandeja, com o lado em branco para ser impresso.</p>
             <button id="btn-versos" class="btn primario grande"><span class="icone">2️⃣</span> Imprimir os versos</button>
             <label class="linha"><input id="inverter-versos" type="checkbox"> Inverter a ordem dos versos</label>
             <p class="dica">Se os versos saírem na folha errada, marque "Inverter". Se saírem de cabeça para baixo, gire as folhas antes de recolocar.</p>
-            <p class="dica">Na janela de impressão, escolha <b>Paisagem</b>, <b>Margens: nenhuma</b> e <b>Escala 100%</b>.</p>
+            <p id="dica-janela" class="dica-janela"></p>
             <details>
-              <summary>Imprimir tudo de uma vez (impressora frente e verso)</summary>
-              <p class="dica">Escolha <b>Frente e verso: virar na borda curta</b>.</p>
+              <summary>Impressora que faz frente e verso sozinha</summary>
+              <p id="dica-duplex" class="dica"></p>
               <button id="btn-imprimir" class="btn"><span class="icone">🖨️</span> Imprimir tudo frente e verso</button>
             </details>
           </div>
+          <button id="btn-excluir-livro" class="btn perigo excluir-livro"><span class="icone">❌</span> Excluir este livro</button>
         </aside>
       </div>
     </section>

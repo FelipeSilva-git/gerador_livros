@@ -31,9 +31,16 @@ PASTA = Path(__file__).resolve().parent
 BANCO = PASTA / "historias.db"
 ESTATICOS = PASTA / "static"
 
-VERSAO_BANCO = 2
-MODOS = {"livreto", "empilhado"}
+VERSAO_BANCO = 3
+MODOS = {"livreto", "empilhado", "soltas"}  # soltas = sem dobrar, 1 página por lado
 AJUSTES = {"inteira", "preencher"}
+ORIENTACOES = {"retrato", "paisagem"}      # páginas em pé ou deitadas
+PAPEIS = {"A4", "A3", "A5", "carta", "oficio", "legal", "personalizado"}
+# Formato do livro: valores usados quando o campo não veio
+FORMATO_PADRAO = {
+    "modo": "livreto", "ajuste": "inteira", "margem_mm": 5.0, "numerar": 1,
+    "papel": "A4", "papel_larg": 210.0, "papel_alt": 297.0, "orientacao": "retrato",
+}
 ID_VALIDO = re.compile(r"[A-Za-z0-9-]{8,64}")
 
 _trava = threading.Lock()
@@ -71,6 +78,10 @@ CREATE TABLE IF NOT EXISTS livros (
     ajuste        TEXT NOT NULL DEFAULT 'inteira',
     margem_mm     REAL NOT NULL DEFAULT 5,
     numerar       INTEGER NOT NULL DEFAULT 1,
+    papel         TEXT NOT NULL DEFAULT 'A4',
+    papel_larg    REAL NOT NULL DEFAULT 210,   -- mm, papel em pé
+    papel_alt     REAL NOT NULL DEFAULT 297,
+    orientacao    TEXT NOT NULL DEFAULT 'retrato',
     criado_em     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     atualizado_em INTEGER NOT NULL,          -- ms; usado para saber quem é mais novo
     excluido      INTEGER NOT NULL DEFAULT 0 -- livro excluído fica marcado para a exclusão sincronizar
@@ -100,9 +111,19 @@ def criar_tabelas():
     with conectar() as con:
         (versao,) = con.execute("PRAGMA user_version").fetchone()
         tabelas = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        if versao < VERSAO_BANCO and "paginas" in tabelas:
+        if versao < 2 and "paginas" in tabelas:
             migrar_para_v2(con)
         con.executescript(ESQUEMA)
+        # v3: tamanho do papel e orientação das páginas
+        colunas = {c["name"] for c in con.execute("PRAGMA table_info(livros)")}
+        for coluna, definicao in (
+            ("papel", "TEXT NOT NULL DEFAULT 'A4'"),
+            ("papel_larg", "REAL NOT NULL DEFAULT 210"),
+            ("papel_alt", "REAL NOT NULL DEFAULT 297"),
+            ("orientacao", "TEXT NOT NULL DEFAULT 'retrato'"),
+        ):
+            if coluna not in colunas:
+                con.execute(f"ALTER TABLE livros ADD COLUMN {coluna} {definicao}")
         con.execute(f"PRAGMA user_version = {VERSAO_BANCO}")
         if not con.execute("SELECT 1 FROM config WHERE chave = 'codigo'").fetchone():
             codigo = f"{secrets.randbelow(10**6):06d}"
@@ -142,6 +163,23 @@ def migrar_para_v2(con):
     con.execute("DROP TABLE livros_v1")
 
 
+def formato_valido(dados):
+    """Só os campos de formato que vieram e são válidos (o resto é ignorado)."""
+    r = {}
+    for campo, opcoes in (("modo", MODOS), ("ajuste", AJUSTES), ("orientacao", ORIENTACOES), ("papel", PAPEIS)):
+        if dados.get(campo) in opcoes:
+            r[campo] = dados[campo]
+    if "numerar" in dados:
+        r["numerar"] = 1 if dados["numerar"] else 0
+    for campo, minimo, maximo in (("margem_mm", 0, 30), ("papel_larg", 50, 1000), ("papel_alt", 50, 1000)):
+        if campo in dados:
+            try:
+                r[campo] = max(float(minimo), min(float(maximo), float(dados[campo])))
+            except (TypeError, ValueError):
+                pass
+    return r
+
+
 def codigo_pareamento(con):
     return con.execute("SELECT valor FROM config WHERE chave = 'codigo'").fetchone()[0]
 
@@ -178,8 +216,7 @@ def livro_para_sync(con, livro):
         "SELECT uuid, nome, img_id FROM paginas WHERE livro_id = ? ORDER BY ordem, id",
         (livro["id"],),
     ).fetchall()
-    campos = ("uuid", "nome", "modo", "ajuste", "margem_mm", "numerar", "criado_em",
-              "atualizado_em", "excluido")
+    campos = ("uuid", "nome", *FORMATO_PADRAO, "criado_em", "atualizado_em", "excluido")
     return {**{c: livro[c] for c in campos}, "paginas": [dict(p) for p in paginas]}
 
 
@@ -448,27 +485,26 @@ class Handler(BaseHTTPRequestHandler):
                 )}
                 if precisa - tem:
                     return self.erro(HTTPStatus.CONFLICT, "Faltam imagens deste livro")
-            valores = (
-                str(livro.get("nome") or "Livro sem nome"),
-                livro.get("modo") if livro.get("modo") in MODOS else "livreto",
-                livro.get("ajuste") if livro.get("ajuste") in AJUSTES else "inteira",
-                max(0.0, min(30.0, float(livro.get("margem_mm", 5)))),
-                1 if livro.get("numerar", 1) else 0,
-                int(livro["atualizado_em"]),
-                1 if livro.get("excluido") else 0,
-            )
+            campos = {
+                "nome": str(livro.get("nome") or "Livro sem nome"),
+                "atualizado_em": int(livro["atualizado_em"]),
+                "excluido": 1 if livro.get("excluido") else 0,
+                # campo que não veio (app antigo) mantém o valor daqui
+                **({} if atual else FORMATO_PADRAO),
+                **formato_valido(livro),
+            }
             if atual:
                 livro_id = atual["id"]
                 con.execute(
-                    """UPDATE livros SET nome = ?, modo = ?, ajuste = ?, margem_mm = ?, numerar = ?,
-                       atualizado_em = ?, excluido = ? WHERE id = ?""",
-                    (*valores, livro_id),
+                    f"UPDATE livros SET {', '.join(f'{c} = ?' for c in campos)} WHERE id = ?",
+                    (*campos.values(), livro_id),
                 )
             else:
+                campos["uuid"] = livro["uuid"]
+                campos["criado_em"] = livro.get("criado_em") or time.strftime("%Y-%m-%d %H:%M:%S")
                 cur = con.execute(
-                    """INSERT INTO livros (nome, modo, ajuste, margem_mm, numerar, atualizado_em,
-                       excluido, uuid, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (*valores, livro["uuid"], livro.get("criado_em") or time.strftime("%Y-%m-%d %H:%M:%S")),
+                    f"INSERT INTO livros ({', '.join(campos)}) VALUES ({', '.join('?' * len(campos))})",
+                    tuple(campos.values()),
                 )
                 livro_id = cur.lastrowid
             con.execute("DELETE FROM paginas WHERE livro_id = ?", (livro_id,))
@@ -491,26 +527,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.erro(HTTPStatus.NOT_FOUND, "Rota não encontrada")
         livro_id = int(m[1])
         dados = self.ler_json()
-        campos, valores = [], []
+        campos = formato_valido(dados)
         if "nome" in dados:
-            campos.append("nome = ?")
-            valores.append(str(dados["nome"]).strip() or "Livro sem nome")
-        if dados.get("modo") in MODOS:
-            campos.append("modo = ?")
-            valores.append(dados["modo"])
-        if dados.get("ajuste") in AJUSTES:
-            campos.append("ajuste = ?")
-            valores.append(dados["ajuste"])
-        if "numerar" in dados:
-            campos.append("numerar = ?")
-            valores.append(1 if dados["numerar"] else 0)
-        if "margem_mm" in dados:
-            campos.append("margem_mm = ?")
-            valores.append(max(0.0, min(30.0, float(dados["margem_mm"]))))
+            campos["nome"] = str(dados["nome"]).strip() or "Livro sem nome"
         with _trava, conectar() as con:
             if campos:
                 con.execute(
-                    f"UPDATE livros SET {', '.join(campos)} WHERE id = ?", (*valores, livro_id)
+                    f"UPDATE livros SET {', '.join(f'{c} = ?' for c in campos)} WHERE id = ?",
+                    (*campos.values(), livro_id),
                 )
                 tocar(con, livro_id)
             livro = livro_dict(con, livro_id)

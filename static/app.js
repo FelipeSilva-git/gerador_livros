@@ -23,11 +23,56 @@ function el(tag, attrs = {}, ...filhos) {
   return e;
 }
 
+// ---------- Papel, orientação e montagem ----------
+const PAPEIS = {
+  A4: { nome: "A4", larg: 210, alt: 297 },
+  A5: { nome: "A5", larg: 148, alt: 210 },
+  A3: { nome: "A3", larg: 297, alt: 420 },
+  carta: { nome: "Carta", larg: 215.9, alt: 279.4 },
+  oficio: { nome: "Ofício", larg: 216, alt: 330 },
+  legal: { nome: "Legal", larg: 215.9, alt: 355.6 },
+};
+const MONTAGENS = { livreto: "livreto grampeado", empilhado: "folhas dobradas e coladas", soltas: "folhas soltas" };
+const mm = (n) => String(Math.round(n));
+const paginasPorFolha = (modo) => (modo === "soltas" ? 2 : 4);
+
+// Tamanho da folha e das páginas conforme o papel, a orientação e a montagem.
+// Folha dobrada com páginas em pé: folha deitada, páginas lado a lado (dobra vertical).
+// Folha dobrada com páginas deitadas: folha em pé, páginas uma em cima da outra
+// (dobra horizontal; o livro abre para cima, como um calendário).
+// Folhas soltas: uma página por lado, a folha fica como a página.
+function geometria(livro = livroAtual) {
+  const curto = Math.min(livro.papel_larg, livro.papel_alt);
+  const longo = Math.max(livro.papel_larg, livro.papel_alt);
+  const deitada = livro.orientacao === "paisagem";
+  const dobrada = livro.modo !== "soltas";
+  const g = {
+    curto, longo, deitada, dobrada,
+    nomePapel: livro.papel === "personalizado" ? `${mm(curto)} × ${mm(longo)} mm` : (PAPEIS[livro.papel] || PAPEIS.A4).nome,
+  };
+  if (dobrada && !deitada) Object.assign(g, { folhaL: longo, folhaA: curto, pagL: longo / 2, pagA: curto, arranjo: "lado-a-lado" });
+  else if (dobrada) Object.assign(g, { folhaL: curto, folhaA: longo, pagL: curto, pagA: longo / 2, arranjo: "empilhada" });
+  else if (!deitada) Object.assign(g, { folhaL: curto, folhaA: longo, pagL: curto, pagA: longo, arranjo: "unica" });
+  else Object.assign(g, { folhaL: longo, folhaA: curto, pagL: longo, pagA: curto, arranjo: "unica" });
+  g.folhaDeitada = g.folhaL > g.folhaA;
+  // Frente e verso automático: livro dobrado vira na borda curta; folha solta em pé, na borda longa
+  g.virar = dobrada || deitada ? "curta" : "longa";
+  return g;
+}
+const tamanhoDaFolha = () => { const g = geometria(); return { larg: g.folhaL, alt: g.folhaA }; };
+
 // ---------- Montagem das folhas (imposição) ----------
-// Cada folha A4 paisagem, dobrada ao meio, tem 4 páginas:
-// frente = [esquerda, direita] e verso = [esquerda, direita].
+// Folha dobrada: 4 páginas, frente = [1ª metade, 2ª metade] e verso = [1ª metade, 2ª metade]
+// (metades = esquerda/direita, ou em cima/embaixo quando as páginas são deitadas).
+// Folha solta: frente = [página], verso = [página seguinte].
 // Números de página começam em 1; páginas que faltam ficam em branco.
 function montarFolhas(totalPaginas, modo) {
+  if (modo === "soltas") {
+    const n = Math.max(2, Math.ceil(totalPaginas / 2) * 2);
+    const folhas = [];
+    for (let i = 0; i < n / 2; i++) folhas.push({ frente: [2 * i + 1], verso: [2 * i + 2] });
+    return { folhas, totalComBrancos: n };
+  }
   const n = Math.max(4, Math.ceil(totalPaginas / 4) * 4);
   const folhas = [];
   for (let i = 0; i < n / 4; i++) {
@@ -72,7 +117,7 @@ async function mostrarLivros() {
     const capa = l.capa_img
       ? el("img", { src: imagemUrl(l.capa_img), alt: "" })
       : document.createTextNode("sem páginas");
-    const folhas = l.total_paginas ? Math.ceil(l.total_paginas / 4) : 0;
+    const folhas = l.total_paginas ? Math.ceil(l.total_paginas / paginasPorFolha(l.modo)) : 0;
     lista.append(
       el("a", { class: "livro-cartao", href: `#/livro/${l.id}` },
         el("div", { class: "capa" }, capa),
@@ -92,7 +137,10 @@ $("#btn-novo-livro").addEventListener("click", async () => {
 
 // ---------- Tela: um livro ----------
 async function abrirLivro(id) {
+  const outroLivro = livroAtual?.id !== id;
   livroAtual = await armazem.obterLivro(id);
+  // Livro novo, sem páginas: começa mostrando o formato para escolher
+  if (outroLivro) $("#etapa-formato").open = !livroAtual.paginas.length;
   renderizarLivro();
 }
 
@@ -100,20 +148,53 @@ function renderizarLivro() {
   const l = livroAtual;
   document.title = `${l.nome} · Livrinhos de Colorir`;
   $("#nome-livro").value = l.nome;
-  document.querySelector(`input[name=modo][value=${l.modo}]`).checked = true;
-  document.querySelector(`input[name=ajuste][value=${l.ajuste}]`).checked = true;
+  for (const campo of ["modo", "ajuste", "orientacao", "papel"]) {
+    const r = document.querySelector(`input[name=${campo}][value="${l[campo]}"]`);
+    if (r) r.checked = true;
+  }
   $("#margem").value = l.margem_mm;
   $("#numerar").checked = !!l.numerar;
+  atualizarFormato();
   renderizarPaginas();
   renderizarPrevia();
+}
+
+// Resumos e dicas que dependem do papel, da orientação e da montagem
+function atualizarFormato() {
+  const l = livroAtual;
+  const g = geometria();
+  const total = l.paginas.length;
+  const folhas = total ? Math.ceil(total / paginasPorFolha(l.modo)) : 0;
+
+  $("#tela-livro").style.setProperty("--pag-aspect", `${g.pagL} / ${g.pagA}`);
+  $("#papel-personalizado").hidden = l.papel !== "personalizado";
+  $("#papel-larg").value = mm(g.curto);
+  $("#papel-alt").value = mm(g.longo);
+
+  $("#resumo-formato").textContent =
+    `${g.nomePapel} · páginas ${g.deitada ? "deitadas" : "em pé"} · ${MONTAGENS[l.modo]}`;
+  $("#resultado-formato").replaceChildren(
+    "✅ Cada página terá ", el("b", {}, `${mm(g.pagL)} × ${mm(g.pagA)} mm`), ". ",
+    g.dobrada
+      ? `Cada folha ${g.nomePapel} leva 4 páginas (2 na frente e 2 no verso) e é dobrada ao meio` +
+        (g.deitada ? " na horizontal: o livro abre para cima, como um calendário." : ".")
+      : `Cada folha ${g.nomePapel} leva 2 páginas (1 na frente e 1 no verso), sem dobrar.`);
+
+  $("#info-paginas").textContent = total ? `${total} página(s) · ${folhas} folha(s)` : "nenhuma página ainda";
+  $("#resumo-impressao").textContent = total
+    ? `${total} página(s) → ${folhas} folha(s) ${g.nomePapel}, frente e verso`
+    : "Coloque as páginas na etapa 2.";
+  $("#dica-janela").replaceChildren(
+    "Na janela de impressão, escolha: papel ", el("b", {}, g.nomePapel), ", ",
+    el("b", {}, g.folhaDeitada ? "Paisagem" : "Retrato"), ", ",
+    el("b", {}, "Margens: nenhuma"), " e ", el("b", {}, "Escala 100%"), ".");
+  $("#dica-duplex").replaceChildren("Escolha ", el("b", {}, `Frente e verso: virar na borda ${g.virar}`), ".");
 }
 
 function renderizarPaginas() {
   const paginas = livroAtual.paginas;
   const lista = $("#lista-paginas");
   lista.replaceChildren();
-  const folhas = paginas.length ? Math.ceil(paginas.length / 4) : 0;
-  $("#info-paginas").textContent = `(${paginas.length} página(s), ${folhas} folha(s))`;
   for (const id of ["#btn-imprimir", "#btn-frentes", "#btn-versos"]) $(id).disabled = paginas.length === 0;
 
   // Onde cada página vai sair: número da página -> "Folha 2 · Verso"
@@ -312,14 +393,25 @@ document.addEventListener("drop", (e) => {
 // Configurações do livro
 async function salvar(campos) {
   livroAtual = await armazem.atualizarLivro(livroAtual.id, campos);
-  renderizarPaginas(); // a montagem muda onde cada página sai
-  renderizarPrevia();
+  renderizarLivro(); // o formato muda onde e como cada página sai
 }
 $("#nome-livro").addEventListener("change", (e) => salvar({ nome: e.target.value }));
-document.querySelectorAll("input[name=modo]").forEach((r) =>
-  r.addEventListener("change", () => salvar({ modo: r.value })));
-document.querySelectorAll("input[name=ajuste]").forEach((r) =>
-  r.addEventListener("change", () => salvar({ ajuste: r.value })));
+for (const campo of ["modo", "ajuste", "orientacao"]) {
+  document.querySelectorAll(`input[name=${campo}]`).forEach((r) =>
+    r.addEventListener("change", () => salvar({ [campo]: r.value })));
+}
+document.querySelectorAll("input[name=papel]").forEach((r) => r.addEventListener("change", async () => {
+  if (r.value !== "personalizado") {
+    return salvar({ papel: r.value, papel_larg: PAPEIS[r.value].larg, papel_alt: PAPEIS[r.value].alt });
+  }
+  await salvar({ papel: "personalizado" }); // começa com a medida atual; depois é só digitar
+  $("#papel-larg").focus();
+}));
+for (const id of ["#papel-larg", "#papel-alt"]) {
+  $(id).addEventListener("change", () => salvar({
+    papel: "personalizado", papel_larg: Number($("#papel-larg").value), papel_alt: Number($("#papel-alt").value),
+  }));
+}
 $("#margem").addEventListener("change", (e) => salvar({ margem_mm: Number(e.target.value) || 0 }));
 $("#numerar").addEventListener("change", (e) => salvar({ numerar: e.target.checked }));
 
@@ -333,8 +425,12 @@ $("#btn-excluir-livro").addEventListener("click", async () => {
 // interativo = prévia na tela (aceita clique e imagens soltas); falso = impressão
 function criarLado(numeros, interativo) {
   const { paginas, ajuste, margem_mm } = livroAtual;
-  const folha = el("div", { class: `folha ${ajuste}` });
-  folha.style.setProperty("--margem-mm", margem_mm);
+  const g = geometria();
+  const folha = el("div", { class: `folha ${ajuste} ${g.arranjo}` });
+  folha.style.setProperty("--fl", g.folhaL);
+  folha.style.setProperty("--fa", g.folhaA);
+  // margem em % da largura da folha (padding em % é sempre relativo à largura)
+  folha.style.setProperty("--margem-pct", `${(margem_mm / g.folhaL) * 100}%`);
   for (const num of numeros) {
     const pagina = num ? paginas[num - 1] : null; // num nulo = metade vazia (impressão de uma página)
     const temImagem = pagina && !pagina.vazia;
@@ -383,8 +479,13 @@ function renderizarPrevia() {
   const { folhas, totalComBrancos } = montarFolhas(total, livroAtual.modo);
   const brancos = totalComBrancos - total;
   aviso.hidden = brancos === 0;
-  aviso.textContent = `Cada folha tem 4 páginas. Com ${total} imagem(ns), ${brancos} página(s) no final vão ficar em branco. ` +
+  aviso.textContent = `Cada folha tem ${paginasPorFolha(livroAtual.modo)} páginas. ` +
+    `Com ${total} página(s), ${brancos} página(s) no final vão ficar em branco. ` +
     `Adicione mais ${brancos} imagem(ns) para completar.`;
+  const g = geometria();
+  const nomeLado = (nums) => nums.length === 1 ? `página ${nums[0]}`
+    : g.arranjo === "empilhada" ? `página ${nums[0]} em cima e ${nums[1]} embaixo`
+    : `páginas ${nums.join(" e ")}`;
 
   folhas.forEach((f, i) => {
     previa.append(
@@ -394,8 +495,8 @@ function renderizarPrevia() {
           botao("🖨️", "Imprimir a folha (frente e verso)", `Imprimir só a folha ${i + 1}, frente e verso`,
             () => mandarImprimir([criarLado(f.frente, false), criarLado(f.verso, false)]))),
         el("div", { class: "previa-lados" },
-          ladoPrevia(`Frente: páginas ${f.frente.join(" e ")}`, f.frente),
-          ladoPrevia(`Verso: páginas ${f.verso.join(" e ")}`, f.verso))));
+          ladoPrevia(`Frente: ${nomeLado(f.frente)}`, f.frente),
+          ladoPrevia(`Verso: ${nomeLado(f.verso)}`, f.verso))));
   });
 }
 
@@ -406,7 +507,7 @@ function ladoPrevia(titulo, numeros) {
       botao("🖨️", "Imprimir este lado", `Imprimir só este lado (${titulo.toLowerCase()})`,
         () => mandarImprimir([criarLado(numeros, false)]))),
     criarLado(numeros, true),
-    el("div", { class: "barra-lado" }, ...numeros.map(botoesDaMetade)));
+    el("div", { class: `barra-lado lados-${numeros.length}` }, ...numeros.map(botoesDaMetade)));
 }
 
 function botoesDaMetade(num) {
@@ -441,10 +542,11 @@ async function imprimir(quais) {
 }
 
 // Coloca as folhas na área de impressão e abre a impressão (PC ou Android)
-async function mandarImprimir(folhas, { retrato = false } = {}) {
+// tamanho = papel como sai da impressora, em mm (padrão: a folha do livro)
+async function mandarImprimir(folhas, tamanho = tamanhoDaFolha()) {
   const area = $("#impressao");
   area.replaceChildren(...folhas);
-  $("#estilo-pagina").textContent = `@page { size: A4 ${retrato ? "portrait" : "landscape"}; margin: 0; }`;
+  $("#estilo-pagina").textContent = `@page { size: ${tamanho.larg}mm ${tamanho.alt}mm; margin: 0; }`;
 
   // Espera todas as imagens carregarem antes de abrir a janela de impressão
   await Promise.all([...area.querySelectorAll("img")].map((img) =>
@@ -455,7 +557,7 @@ async function mandarImprimir(folhas, { retrato = false } = {}) {
   try {
     const cap = window.Capacitor;
     const impressora = cap.registerPlugin ? cap.registerPlugin("Impressora") : cap.Plugins.Impressora;
-    await impressora.imprimir({ nome: livroAtual.nome, retrato });
+    await impressora.imprimir({ nome: livroAtual.nome, larguraMm: tamanho.larg, alturaMm: tamanho.alt });
   } catch (e) {
     alert("Não foi possível abrir a impressão: " + (e.message || e));
   }
@@ -463,6 +565,9 @@ async function mandarImprimir(folhas, { retrato = false } = {}) {
 
 // ---------- Imprimir uma página só ----------
 function escolherImpressaoUnica(num) {
+  const g = geometria();
+  // Folhas soltas: a página já ocupa a folha toda, não tem o que escolher
+  if (!g.dobrada) return imprimirNoTamanhoDoLivro(num);
   const pagina = livroAtual.paginas[num - 1];
   const janela = $("#janela-geral");
   const fechar = () => janela.close();
@@ -471,7 +576,7 @@ function escolherImpressaoUnica(num) {
     el("h2", {}, `🖨️ Imprimir a página ${num}`),
     el("img", { class: "miniatura-unica", src: imagemUrl(pagina.img_id), alt: "" }),
     el("div", { class: "acoes-sync" },
-      botao("📄", "Folha inteira (A4 em pé)", "A página ocupa a folha toda: bom para colorir avulsa",
+      botao("📄", `Folha inteira (${g.nomePapel} ${g.deitada ? "deitada" : "em pé"})`, "A página ocupa a folha toda: bom para colorir avulsa",
         () => { fechar(); imprimirPaginaInteira(num); }, "primario grande"),
       el("p", { class: "dica" }, "O desenho fica grande, ocupando a folha toda."),
       botao("📖", "No tamanho do livro (meia folha)", "Sai na mesma posição que tem no livro",
@@ -482,11 +587,16 @@ function escolherImpressaoUnica(num) {
 
 function imprimirPaginaInteira(num) {
   const { paginas, ajuste, margem_mm, numerar } = livroAtual;
+  const g = geometria();
+  // A folha toda, na mesma orientação das páginas do livro
+  const tamanho = g.deitada ? { larg: g.longo, alt: g.curto } : { larg: g.curto, alt: g.longo };
   const folha = el("div", { class: `pagina-inteira ${ajuste}` });
+  folha.style.setProperty("--fl", tamanho.larg);
+  folha.style.setProperty("--fa", tamanho.alt);
   folha.style.setProperty("--margem-mm", Math.max(8, margem_mm));
   folha.append(el("img", { src: imagemUrl(paginas[num - 1].img_id), alt: "" }));
   if (numerar) folha.append(el("span", { class: "numero-impresso" }, String(num)));
-  mandarImprimir([folha], { retrato: true });
+  mandarImprimir([folha], tamanho);
 }
 
 function imprimirNoTamanhoDoLivro(num) {

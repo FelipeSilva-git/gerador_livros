@@ -9,6 +9,28 @@ const NO_CELULAR =
   !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
   new URLSearchParams(location.search).has("local"); // ?local=1 testa o modo celular no PC
 
+// Formato do livro: valores de quem ainda não escolheu (livros antigos = A4, em pé, livreto)
+const FORMATO_PADRAO = {
+  modo: "livreto", ajuste: "inteira", margem_mm: 5, numerar: 1,
+  papel: "A4", papel_larg: 210, papel_alt: 297, orientacao: "retrato",
+};
+
+// Confere os campos de formato que vieram (igual ao servidor)
+function formatoValido(dados) {
+  const r = {};
+  const opcoes = {
+    modo: ["livreto", "empilhado", "soltas"], ajuste: ["inteira", "preencher"],
+    orientacao: ["retrato", "paisagem"], papel: ["A4", "A3", "A5", "carta", "oficio", "legal", "personalizado"],
+  };
+  for (const [campo, validos] of Object.entries(opcoes)) if (validos.includes(dados[campo])) r[campo] = dados[campo];
+  if ("numerar" in dados) r.numerar = dados.numerar ? 1 : 0;
+  for (const [campo, min, max] of [["margem_mm", 0, 30], ["papel_larg", 50, 1000], ["papel_alt", 50, 1000]]) {
+    const n = Number(dados[campo]);
+    if (campo in dados && Number.isFinite(n)) r[campo] = Math.max(min, Math.min(max, n));
+  }
+  return r;
+}
+
 function novoId() {
   if (crypto.randomUUID) return crypto.randomUUID();
   return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
@@ -113,6 +135,7 @@ const ArmazemLocal = (() => {
     const livro = await transacao(["livros", "paginas"], "readonly", async ({ livros, paginas }) => {
       const l = await pedido(livros.get(id));
       if (!l || l.excluido) return null;
+      for (const [c, v] of Object.entries(FORMATO_PADRAO)) if (!(c in l)) l[c] = v;
       l.paginas = (await paginasDoLivro(paginas, id)).map((p) => ({ ...p, vazia: !p.img_id }));
       return l;
     });
@@ -159,8 +182,6 @@ const ArmazemLocal = (() => {
     return p;
   }
 
-  const CAMPOS = ["nome", "modo", "ajuste", "margem_mm", "numerar"];
-
   return {
     imagemUrl: (imgId) => urls.get(imgId) || "",
 
@@ -168,6 +189,7 @@ const ArmazemLocal = (() => {
       const lista = await transacao(["livros", "paginas"], "readonly", async ({ livros, paginas }) => {
         const todos = (await pedido(livros.getAll())).filter((l) => !l.excluido);
         for (const l of todos) {
+          for (const [c, v] of Object.entries(FORMATO_PADRAO)) if (!(c in l)) l[c] = v;
           const pags = await paginasDoLivro(paginas, l.id);
           l.total_paginas = pags.length;
           l.capa_img = pags.find((p) => p.img_id)?.img_id || null;
@@ -181,7 +203,7 @@ const ArmazemLocal = (() => {
     async criarLivro(nome) {
       const id = await transacao(["livros"], "readwrite", ({ livros }) => pedido(livros.add({
         uuid: novoId(), nome: (nome || "").trim() || "Livro sem nome",
-        modo: "livreto", ajuste: "inteira", margem_mm: 5, numerar: 1,
+        ...FORMATO_PADRAO,
         criado_em: new Date().toISOString(), atualizado_em: Date.now(), excluido: 0,
       })));
       return livroCompleto(id);
@@ -191,10 +213,8 @@ const ArmazemLocal = (() => {
 
     async atualizarLivro(id, campos) {
       await alterarLivro(id, (_, livro) => {
-        for (const c of CAMPOS) if (c in campos) livro[c] = campos[c];
+        Object.assign(livro, formatoValido(campos));
         if ("nome" in campos) livro.nome = String(campos.nome).trim() || "Livro sem nome";
-        if ("numerar" in campos) livro.numerar = campos.numerar ? 1 : 0;
-        if ("margem_mm" in campos) livro.margem_mm = Math.max(0, Math.min(30, Number(campos.margem_mm) || 0));
       });
       return livroCompleto(id);
     },
@@ -282,9 +302,11 @@ const ArmazemLocal = (() => {
         const atual = await pedido(lojas.livros.index("uuid").get(s.uuid));
         if (atual && atual.atualizado_em >= s.atualizado_em) return;
         const livro = {
-          ...(atual ? { id: atual.id } : {}),
-          uuid: s.uuid, nome: s.nome, modo: s.modo, ajuste: s.ajuste, margem_mm: s.margem_mm,
-          numerar: s.numerar, criado_em: s.criado_em, atualizado_em: s.atualizado_em, excluido: s.excluido ? 1 : 0,
+          ...FORMATO_PADRAO,
+          ...(atual || {}), // campo que não veio (PC antigo) mantém o valor daqui
+          ...formatoValido(s),
+          uuid: s.uuid, nome: s.nome, criado_em: s.criado_em, atualizado_em: s.atualizado_em,
+          excluido: s.excluido ? 1 : 0,
         };
         const id = await pedido(lojas.livros.put(livro));
         for (const p of await paginasDoLivro(lojas.paginas, id)) lojas.paginas.delete(p.id);
