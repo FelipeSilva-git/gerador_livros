@@ -33,7 +33,7 @@ ESTATICOS = PASTA / "static"
 
 VERSAO_BANCO = 3
 # Sobe junto com mudanças que a tela precisa; a tela avisa se o servidor rodando for mais velho
-VERSAO_SERVIDOR = 3
+VERSAO_SERVIDOR = 4
 MODOS = {"livreto", "empilhado", "soltas"}  # soltas = sem dobrar, 1 página por lado
 AJUSTES = {"inteira", "preencher"}
 ORIENTACOES = {"retrato", "paisagem"}      # páginas em pé ou deitadas
@@ -42,7 +42,9 @@ PAPEIS = {"A4", "A3", "A5", "carta", "oficio", "legal", "personalizado"}
 FORMATO_PADRAO = {
     "modo": "livreto", "ajuste": "inteira", "margem_mm": 5.0, "numerar": 1,
     "papel": "A4", "papel_larg": 210.0, "papel_alt": 297.0, "orientacao": "retrato",
+    "capa_verso_branco": 1, "contracapa_verso_branco": 1,
 }
+SECOES = {"historia", "capa", "contracapa"}  # onde a página fica no livro
 ID_VALIDO = re.compile(r"[A-Za-z0-9-]{8,64}")
 
 _trava = threading.Lock()
@@ -84,6 +86,8 @@ CREATE TABLE IF NOT EXISTS livros (
     papel_larg    REAL NOT NULL DEFAULT 210,   -- mm, papel em pé
     papel_alt     REAL NOT NULL DEFAULT 297,
     orientacao    TEXT NOT NULL DEFAULT 'retrato',
+    capa_verso_branco       INTEGER NOT NULL DEFAULT 1,
+    contracapa_verso_branco INTEGER NOT NULL DEFAULT 1,
     criado_em     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     atualizado_em INTEGER NOT NULL,          -- ms; usado para saber quem é mais novo
     excluido      INTEGER NOT NULL DEFAULT 0 -- livro excluído fica marcado para a exclusão sincronizar
@@ -94,7 +98,8 @@ CREATE TABLE IF NOT EXISTS paginas (
     ordem    INTEGER NOT NULL,
     uuid     TEXT NOT NULL,
     nome     TEXT NOT NULL,
-    img_id   TEXT                            -- NULL = página em branco
+    img_id   TEXT,                           -- NULL = página em branco
+    secao    TEXT NOT NULL DEFAULT 'historia' -- historia, capa ou contracapa
 );
 CREATE INDEX IF NOT EXISTS idx_paginas_livro ON paginas(livro_id, ordem);
 CREATE TABLE IF NOT EXISTS imagens (
@@ -123,9 +128,14 @@ def criar_tabelas():
             ("papel_larg", "REAL NOT NULL DEFAULT 210"),
             ("papel_alt", "REAL NOT NULL DEFAULT 297"),
             ("orientacao", "TEXT NOT NULL DEFAULT 'retrato'"),
+            # v4: capa e contracapa
+            ("capa_verso_branco", "INTEGER NOT NULL DEFAULT 1"),
+            ("contracapa_verso_branco", "INTEGER NOT NULL DEFAULT 1"),
         ):
             if coluna not in colunas:
                 con.execute(f"ALTER TABLE livros ADD COLUMN {coluna} {definicao}")
+        if "secao" not in {c["name"] for c in con.execute("PRAGMA table_info(paginas)")}:
+            con.execute("ALTER TABLE paginas ADD COLUMN secao TEXT NOT NULL DEFAULT 'historia'")
         con.execute(f"PRAGMA user_version = {VERSAO_BANCO}")
         if not con.execute("SELECT 1 FROM config WHERE chave = 'codigo'").fetchone():
             codigo = f"{secrets.randbelow(10**6):06d}"
@@ -171,8 +181,9 @@ def formato_valido(dados):
     for campo, opcoes in (("modo", MODOS), ("ajuste", AJUSTES), ("orientacao", ORIENTACOES), ("papel", PAPEIS)):
         if dados.get(campo) in opcoes:
             r[campo] = dados[campo]
-    if "numerar" in dados:
-        r["numerar"] = 1 if dados["numerar"] else 0
+    for campo in ("numerar", "capa_verso_branco", "contracapa_verso_branco"):
+        if campo in dados:
+            r[campo] = 1 if dados[campo] else 0
     for campo, minimo, maximo in (("margem_mm", 0, 30), ("papel_larg", 50, 1000), ("papel_alt", 50, 1000)):
         if campo in dados:
             try:
@@ -204,7 +215,7 @@ def livro_dict(con, livro_id):
     if livro is None:
         return None
     paginas = con.execute(
-        "SELECT id, ordem, uuid, nome, img_id FROM paginas WHERE livro_id = ? ORDER BY ordem, id",
+        "SELECT id, ordem, uuid, nome, img_id, secao FROM paginas WHERE livro_id = ? ORDER BY ordem, id",
         (livro_id,),
     ).fetchall()
     dados = dict(livro)
@@ -215,7 +226,7 @@ def livro_dict(con, livro_id):
 def livro_para_sync(con, livro):
     """Formato usado para trocar um livro inteiro com o celular."""
     paginas = con.execute(
-        "SELECT uuid, nome, img_id FROM paginas WHERE livro_id = ? ORDER BY ordem, id",
+        "SELECT uuid, nome, img_id, secao FROM paginas WHERE livro_id = ? ORDER BY ordem, id",
         (livro["id"],),
     ).fetchall()
     campos = ("uuid", "nome", *FORMATO_PADRAO, "criado_em", "atualizado_em", "excluido")
@@ -357,7 +368,7 @@ class Handler(BaseHTTPRequestHandler):
                 linhas = con.execute(
                     """SELECT l.*, COUNT(p.id) AS total_paginas,
                               (SELECT img_id FROM paginas WHERE livro_id = l.id AND img_id IS NOT NULL
-                               ORDER BY ordem, id LIMIT 1) AS capa_img
+                               ORDER BY secao = 'capa' DESC, ordem, id LIMIT 1) AS capa_img
                        FROM livros l LEFT JOIN paginas p ON p.livro_id = l.id
                        WHERE l.excluido = 0
                        GROUP BY l.id ORDER BY l.criado_em DESC, l.id DESC"""
@@ -438,11 +449,15 @@ class Handler(BaseHTTPRequestHandler):
                 if imagem is None:
                     return
                 nome = unquote(self.headers.get("X-Nome-Arquivo") or "imagem")
+            secao = self.headers.get("X-Secao") if self.headers.get("X-Secao") in SECOES else "historia"
             with _trava, conectar() as con:
                 if not con.execute(
                     "SELECT 1 FROM livros WHERE id = ? AND excluido = 0", (livro_id,)
                 ).fetchone():
                     return self.erro(HTTPStatus.NOT_FOUND, "Livro não encontrado")
+                if secao != "historia":
+                    # só existe uma capa e uma contracapa: a nova substitui a antiga
+                    con.execute("DELETE FROM paginas WHERE livro_id = ? AND secao = ?", (livro_id, secao))
                 img_id = None
                 if imagem:
                     img_id = novo_id()
@@ -451,10 +466,11 @@ class Handler(BaseHTTPRequestHandler):
                     "SELECT COALESCE(MAX(ordem), 0) + 1 FROM paginas WHERE livro_id = ?", (livro_id,)
                 ).fetchone()
                 cur = con.execute(
-                    "INSERT INTO paginas (livro_id, ordem, uuid, nome, img_id) VALUES (?, ?, ?, ?, ?)",
-                    (livro_id, ordem, novo_id(), nome, img_id),
+                    "INSERT INTO paginas (livro_id, ordem, uuid, nome, img_id, secao) VALUES (?, ?, ?, ?, ?, ?)",
+                    (livro_id, ordem, novo_id(), nome, img_id, secao),
                 )
                 tocar(con, livro_id)
+                limpar_imagens_soltas(con)
             return self.responder_json({"id": cur.lastrowid, "ordem": ordem}, HTTPStatus.CREATED)
 
         # --- sincronização ---
@@ -516,9 +532,9 @@ class Handler(BaseHTTPRequestHandler):
             if not livro.get("excluido"):
                 for ordem, p in enumerate(paginas, start=1):
                     con.execute(
-                        "INSERT INTO paginas (livro_id, ordem, uuid, nome, img_id) VALUES (?, ?, ?, ?, ?)",
+                        "INSERT INTO paginas (livro_id, ordem, uuid, nome, img_id, secao) VALUES (?, ?, ?, ?, ?, ?)",
                         (livro_id, ordem, str(p.get("uuid") or novo_id()), str(p.get("nome") or "imagem"),
-                         p.get("img_id") or None),
+                         p.get("img_id") or None, p.get("secao") if p.get("secao") in SECOES else "historia"),
                     )
             limpar_imagens_soltas(con)
         return self.responder_json({"ok": True})

@@ -13,7 +13,9 @@ const NO_CELULAR =
 const FORMATO_PADRAO = {
   modo: "livreto", ajuste: "inteira", margem_mm: 5, numerar: 1,
   papel: "A4", papel_larg: 210, papel_alt: 297, orientacao: "retrato",
+  capa_verso_branco: 1, contracapa_verso_branco: 1,
 };
+const SECOES = ["historia", "capa", "contracapa"]; // onde a página fica no livro
 
 // Confere os campos de formato que vieram (igual ao servidor)
 function formatoValido(dados) {
@@ -23,7 +25,9 @@ function formatoValido(dados) {
     orientacao: ["retrato", "paisagem"], papel: ["A4", "A3", "A5", "carta", "oficio", "legal", "personalizado"],
   };
   for (const [campo, validos] of Object.entries(opcoes)) if (validos.includes(dados[campo])) r[campo] = dados[campo];
-  if ("numerar" in dados) r.numerar = dados.numerar ? 1 : 0;
+  for (const campo of ["numerar", "capa_verso_branco", "contracapa_verso_branco"]) {
+    if (campo in dados) r[campo] = dados[campo] ? 1 : 0;
+  }
   for (const [campo, min, max] of [["margem_mm", 0, 30], ["papel_larg", 50, 1000], ["papel_alt", 50, 1000]]) {
     const n = Number(dados[campo]);
     if (campo in dados && Number.isFinite(n)) r[campo] = Math.max(min, Math.min(max, n));
@@ -64,9 +68,9 @@ const ArmazemServidor = (() => {
     obterLivro: (id) => api("GET", `/api/livros/${id}`),
     atualizarLivro: (id, campos) => api("PATCH", `/api/livros/${id}`, campos),
     excluirLivro: (id) => api("DELETE", `/api/livros/${id}`),
-    adicionarPagina: (livroId, arq) => arq
-      ? api("POST", `/api/livros/${livroId}/paginas`, arq, cabecalhosArquivo(arq))
-      : api("POST", `/api/livros/${livroId}/paginas`, undefined, { "X-Pagina-Vazia": "1" }),
+    adicionarPagina: (livroId, arq, secao = "historia") => arq
+      ? api("POST", `/api/livros/${livroId}/paginas`, arq, { ...cabecalhosArquivo(arq), "X-Secao": secao })
+      : api("POST", `/api/livros/${livroId}/paginas`, undefined, { "X-Pagina-Vazia": "1", "X-Secao": secao }),
     reordenar: (livroId, ids) => api("PUT", `/api/livros/${livroId}/ordem`, { ids }),
     trocarImagem: (paginaId, arq) => api("PUT", `/api/paginas/${paginaId}/imagem`, arq, cabecalhosArquivo(arq)),
     apagarImagem: (paginaId) => api("DELETE", `/api/paginas/${paginaId}/imagem`),
@@ -136,7 +140,7 @@ const ArmazemLocal = (() => {
       const l = await pedido(livros.get(id));
       if (!l || l.excluido) return null;
       for (const [c, v] of Object.entries(FORMATO_PADRAO)) if (!(c in l)) l[c] = v;
-      l.paginas = (await paginasDoLivro(paginas, id)).map((p) => ({ ...p, vazia: !p.img_id }));
+      l.paginas = (await paginasDoLivro(paginas, id)).map((p) => ({ secao: "historia", ...p, vazia: !p.img_id }));
       return l;
     });
     if (!livro) throw new Error("Livro não encontrado");
@@ -192,7 +196,7 @@ const ArmazemLocal = (() => {
           for (const [c, v] of Object.entries(FORMATO_PADRAO)) if (!(c in l)) l[c] = v;
           const pags = await paginasDoLivro(paginas, l.id);
           l.total_paginas = pags.length;
-          l.capa_img = pags.find((p) => p.img_id)?.img_id || null;
+          l.capa_img = (pags.find((p) => p.secao === "capa" && p.img_id) || pags.find((p) => p.img_id))?.img_id || null;
         }
         return todos.sort((a, b) => (b.criado_em || "").localeCompare(a.criado_em || "") || b.id - a.id);
       });
@@ -226,10 +230,13 @@ const ArmazemLocal = (() => {
       });
     },
 
-    async adicionarPagina(livroId, arq) {
+    async adicionarPagina(livroId, arq, secao = "historia") {
       await alterarLivro(livroId, async ({ paginas, imagens }) => {
         const pags = await paginasDoLivro(paginas, livroId);
+        // só existe uma capa e uma contracapa: a nova substitui a antiga
+        if (secao !== "historia") for (const p of pags) if (p.secao === secao) paginas.delete(p.id);
         paginas.add({
+          secao: SECOES.includes(secao) ? secao : "historia",
           livro_id: livroId, uuid: novoId(),
           ordem: pags.length ? Math.max(...pags.map((p) => p.ordem)) + 1 : 1,
           nome: arq ? arq.name || "imagem" : "página em branco",
@@ -278,7 +285,7 @@ const ArmazemLocal = (() => {
         const l = await pedido(livros.index("uuid").get(uuid));
         const pags = await paginasDoLivro(paginas, l.id);
         const { id, ...resto } = l;
-        return { ...resto, paginas: pags.map(({ uuid, nome, img_id }) => ({ uuid, nome, img_id })) };
+        return { ...resto, paginas: pags.map(({ uuid, nome, img_id, secao }) => ({ uuid, nome, img_id, secao: secao || "historia" })) };
       });
     },
 
@@ -313,6 +320,7 @@ const ArmazemLocal = (() => {
         if (!livro.excluido) {
           s.paginas.forEach((p, i) => lojas.paginas.add({
             livro_id: id, ordem: i + 1, uuid: p.uuid, nome: p.nome, img_id: p.img_id || null,
+            secao: SECOES.includes(p.secao) ? p.secao : "historia",
           }));
         }
         await limparImagensSoltas(lojas);

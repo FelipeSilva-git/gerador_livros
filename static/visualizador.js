@@ -23,10 +23,10 @@ const VISTA_INICIAL = { zoom: 1, rx: 18, ry: 0 };
 const vistaInicial = () => ({ ...VISTA_INICIAL, rx: telaPequena() ? 6 : VISTA_INICIAL.rx });
 
 function abrirVisualizador() {
-  const { paginas, ajuste, margem_mm, numerar } = livroAtual;
-  if (!paginas.length) return alert("Coloque imagens no livro primeiro.");
+  const { ajuste, margem_mm, numerar } = livroAtual;
+  if (!montado.seq.length) return alert("Coloque imagens no livro primeiro.");
   const g = geometria();
-  vis.paginas = montarFolhas(paginas.length, livroAtual.modo).totalComBrancos; // como no impresso
+  vis.paginas = montado.seq.length; // como no impresso (capa, história, brancos, contracapa)
   vis.total = vis.paginas / 2;
   vis.eixo = g.dobrada && g.deitada ? "x" : "y";
   vis.aspecto = g.pagL / g.pagA;
@@ -34,11 +34,12 @@ function abrirVisualizador() {
   Object.assign(vis, vistaInicial());
 
   const face = (num, lado) => {
-    const p = paginas[num - 1];
+    const e = entrada(num);
+    const p = e?.pagina;
     const f = el("div", { class: `vis-face ${lado} ${ajuste}` });
     f.style.setProperty("--margem-pct", `${(margem_mm / g.pagL) * 100}%`);
     if (p && !p.vazia) f.append(el("img", { src: imagemUrl(p.img_id), alt: `Página ${num}`, draggable: "false" }));
-    if (numerar) f.append(el("span", { class: "vis-num" }, String(num)));
+    if (numerar && numeroImpresso(e)) f.append(el("span", { class: "vis-num" }, String(num)));
     f.dataset.lado = lado;
     return f;
   };

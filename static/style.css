@@ -420,6 +420,27 @@ details.etapa[open] .quando-fechado, details.etapa:not([open]) .quando-aberto { 
 }
 .aviso-servidor .icone { font-size: 1.8rem; }
 
+/* ---------- Capa e contracapa ---------- */
+.capas { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 560px) { .capas { grid-template-columns: 1fr; } }
+.espaco-capa { background: #fbf7f0; border: 2px solid var(--borda); border-radius: 12px; padding: 12px; }
+.espaco-capa h3 { margin: 0 0 8px; font-size: 1.2rem; }
+.espaco-capa h3 small { color: var(--suave); font-weight: normal; font-size: .9rem; }
+.quadro-capa {
+  aspect-ratio: var(--pag-aspect, 148.5 / 210); max-height: 340px; margin: 0 auto;
+  display: grid; place-items: center; cursor: pointer; overflow: hidden;
+  background: #fff; border: 3px dashed var(--borda); border-radius: 8px;
+}
+.quadro-capa:hover { border-color: var(--destaque); }
+.quadro-capa.alvo { border-color: var(--destaque); background: #fff1ea; }
+.quadro-capa img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.quadro-capa .convite { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--suave); font-weight: 700; }
+.quadro-capa .convite .icone { font-size: 2.4rem; color: var(--destaque); }
+.espaco-capa .onde { margin-top: 8px; padding: 6px; border-radius: 8px; text-align: center; background: #efe6da; font-weight: 700; }
+.espaco-capa .acoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.espaco-capa .acoes .btn { flex: 1 1 110px; min-height: 48px; font-size: 1rem; }
+.metade .convite small { font-weight: normal; font-size: .8rem; }
+
 .impressao { display: none; }
 .numero-impresso {
   position: absolute; bottom: 3mm; left: 50%; transform: translateX(-50%);

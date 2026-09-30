@@ -69,7 +69,7 @@ const tamanhoDaFolha = () => { const g = geometria(); return { larg: g.folhaL, a
 // Folha dobrada: 4 páginas, frente = [1ª metade, 2ª metade] e verso = [1ª metade, 2ª metade]
 // (metades = esquerda/direita, ou em cima/embaixo quando as páginas são deitadas).
 // Folha solta: frente = [página], verso = [página seguinte].
-// Números de página começam em 1; páginas que faltam ficam em branco.
+// Números de página começam em 1 (posição no livro impresso).
 function montarFolhas(totalPaginas, modo) {
   if (modo === "soltas") {
     const n = Math.max(2, Math.ceil(totalPaginas / 2) * 2);
@@ -90,6 +90,34 @@ function montarFolhas(totalPaginas, modo) {
   }
   return { folhas, totalComBrancos: n };
 }
+
+// ---------- Livro montado: a sequência das páginas impressas ----------
+// [capa] [verso da capa em branco?] história... [brancos que faltam] [verso da contracapa em branco?] [contracapa]
+// Os brancos que completam a última folha entram ANTES da contracapa: ela é sempre a última página.
+const ehHistoria = (p) => !p.secao || p.secao === "historia";
+let montado = null;
+
+function montarLivro() {
+  const l = livroAtual;
+  const capa = l.paginas.find((p) => p.secao === "capa") || null;
+  const contracapa = l.paginas.find((p) => p.secao === "contracapa") || null;
+  const historia = l.paginas.filter(ehHistoria);
+  const inicio = capa ? [{ tipo: "capa", pagina: capa }, ...(l.capa_verso_branco ? [{ tipo: "verso-capa" }] : [])] : [];
+  const fim = contracapa ? [...(l.contracapa_verso_branco ? [{ tipo: "verso-contracapa" }] : []), { tipo: "contracapa", pagina: contracapa }] : [];
+  const meio = historia.map((pagina, indice) => ({ tipo: "historia", pagina, indice }));
+  const usadas = inicio.length + meio.length + fim.length;
+  const { folhas, totalComBrancos } = montarFolhas(usadas, l.modo);
+  const brancos = usadas ? Array.from({ length: totalComBrancos - usadas }, () => ({ tipo: "branco" })) : [];
+  const seq = usadas ? [...inicio, ...meio, ...brancos, ...fim] : [];
+  seq.forEach((e, i) => { e.num = i + 1; });
+  return { seq, folhas: usadas ? folhas : [], capa, contracapa, historia, antesDaHistoria: inicio.length, brancos: brancos.length };
+}
+
+const entrada = (num) => (num ? montado.seq[num - 1] : null);
+const NOMES_ESPECIAIS = { capa: "Capa", contracapa: "Contracapa", "verso-capa": "Verso da capa", "verso-contracapa": "Verso da contracapa" };
+// Capa, contracapa e seus versos não levam número impresso
+const numeroImpresso = (e) => (e && (e.tipo === "historia" || e.tipo === "branco") ? e.num : null);
+const nomeDaPagina = (e) => NOMES_ESPECIAIS[e.tipo] || `Pág. ${e.num}`;
 
 // ---------- Estado ----------
 let livroAtual = null;
@@ -150,6 +178,7 @@ async function abrirLivro(id) {
 
 function renderizarLivro() {
   const l = livroAtual;
+  montado = montarLivro();
   document.title = `${l.nome} · Livrinhos de Colorir`;
   $("#nome-livro").value = l.nome;
   for (const campo of ["modo", "ajuste", "orientacao", "papel"]) {
@@ -159,6 +188,7 @@ function renderizarLivro() {
   $("#margem").value = l.margem_mm;
   $("#numerar").checked = !!l.numerar;
   atualizarFormato();
+  renderizarCapas();
   renderizarPaginas();
   renderizarPrevia();
 }
@@ -167,8 +197,9 @@ function renderizarLivro() {
 function atualizarFormato() {
   const l = livroAtual;
   const g = geometria();
-  const total = l.paginas.length;
-  const folhas = total ? Math.ceil(total / paginasPorFolha(l.modo)) : 0;
+  const total = montado.seq.length;
+  const folhas = montado.folhas.length;
+  const nHistoria = montado.historia.length;
 
   $("#tela-livro").style.setProperty("--pag-aspect", `${g.pagL} / ${g.pagA}`);
   $("#papel-personalizado").hidden = l.papel !== "personalizado";
@@ -184,33 +215,107 @@ function atualizarFormato() {
         (g.deitada ? " na horizontal: o livro abre para cima, como um calendário." : ".")
       : `Cada folha ${g.nomePapel} leva 2 páginas (1 na frente e 1 no verso), sem dobrar.`);
 
-  $("#info-paginas").textContent = total ? `${total} página(s) · ${folhas} folha(s)` : "nenhuma página ainda";
+  $("#info-capa").textContent = [montado.capa && "com capa", montado.contracapa && "com contracapa"]
+    .filter(Boolean).join(" e ") || "sem capa";
+  $("#info-paginas").textContent = nHistoria ? `${nHistoria} página(s)` : "nenhuma página ainda";
   $("#resumo-impressao").textContent = total
-    ? `${total} página(s) → ${folhas} folha(s) ${g.nomePapel}, frente e verso`
-    : "Coloque as páginas na etapa 2.";
+    ? `${total} página(s) no livro → ${folhas} folha(s) ${g.nomePapel}, frente e verso`
+    : "Coloque as páginas na etapa 3.";
   $("#dica-janela").replaceChildren(
     "Na janela de impressão, escolha: papel ", el("b", {}, g.nomePapel), ", ",
     el("b", {}, g.folhaDeitada ? "Paisagem" : "Retrato"), ", ",
     el("b", {}, "Margens: nenhuma"), " e ", el("b", {}, "Escala 100%"), ".");
   $("#dica-duplex").replaceChildren("Escolha ", el("b", {}, `Frente e verso: virar na borda ${g.virar}`), ".");
+  for (const id of ["#btn-imprimir", "#btn-frentes", "#btn-versos"]) $(id).disabled = total === 0;
 }
 
+// Onde cada página do livro vai sair: número no livro -> "Folha 2 · Verso"
+function ondeSai() {
+  const onde = {};
+  montado.folhas.forEach((f, i) => {
+    for (const n of f.frente) onde[n] = `Folha ${i + 1} · Frente`;
+    for (const n of f.verso) onde[n] = `Folha ${i + 1} · Verso`;
+  });
+  return onde;
+}
+
+// ---------- Etapa 2: capa e contracapa ----------
+const CAPAS = {
+  capa: { titulo: "📕 Capa", explica: "a frente do livro", verso: "capa_verso_branco", nomeVerso: "Deixar o verso da capa em branco" },
+  contracapa: { titulo: "📘 Contracapa", explica: "a parte de trás do livro", verso: "contracapa_verso_branco", nomeVerso: "Deixar o verso da contracapa em branco" },
+};
+
+function renderizarCapas() {
+  const onde = ondeSai();
+  for (const [secao, info] of Object.entries(CAPAS)) {
+    const pagina = montado[secao];
+    const e = pagina && montado.seq.find((x) => x.pagina === pagina);
+    const escolher = () => escolherArquivo((arq) => colocarCapa(secao, arq));
+    const quadro = el("div", { class: "quadro-capa", title: pagina ? `Trocar a ${secao}` : `Colocar a ${secao}` },
+      pagina
+        ? el("img", { src: imagemUrl(pagina.img_id), alt: info.titulo })
+        : el("span", { class: "convite" }, el("span", { class: "icone" }, "➕"), `Colocar a ${secao}`));
+    quadro.addEventListener("click", escolher);
+    ligarSoltarImagem(quadro, (arq) => colocarCapa(secao, arq));
+
+    const verso = el("input", { type: "checkbox" });
+    verso.checked = !!livroAtual[info.verso];
+    verso.addEventListener("change", () => salvar({ [info.verso]: verso.checked }));
+
+    $(`#espaco-${secao}`).replaceChildren(
+      el("h3", {}, info.titulo, " ", el("small", {}, `(${info.explica})`)),
+      quadro,
+      e ? el("div", { class: "onde" }, "📍 ", `${onde[e.num]}`) : null,
+      el("div", { class: "acoes" },
+        pagina
+          ? botao("🔄", "Trocar", `Trocar a ${secao}`, escolher)
+          : botao("➕", `Colocar ${secao}`, `Colocar a imagem da ${secao}`, escolher, "primario"),
+        pagina && botao("🗑️", "Tirar", `Tirar a ${secao} do livro`, () => tirarCapa(secao), "perigo"),
+        pagina && botao("🖨️", "Imprimir", `Imprimir só a ${secao}`, () => escolherImpressaoUnica(e.num))),
+      el("label", { class: "linha" }, verso, info.nomeVerso));
+  }
+}
+
+async function colocarCapa(secao, arquivo) {
+  if (!arquivo.type.startsWith("image/")) return alert("Escolha um arquivo de imagem.");
+  const atual = montado[secao];
+  if (atual) return trocarImagem(atual, arquivo);
+  await armazem.adicionarPagina(livroAtual.id, arquivo, secao);
+  await abrirLivro(livroAtual.id);
+}
+
+async function tirarCapa(secao) {
+  if (!confirm(`Tirar a ${secao} do livro?`)) return;
+  await armazem.removerPagina(montado[secao].id);
+  await abrirLivro(livroAtual.id);
+}
+
+// Soltar uma imagem do computador em cima de um elemento
+function ligarSoltarImagem(alvo, aoSoltar) {
+  alvo.addEventListener("dragover", (e) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    alvo.classList.add("alvo");
+  });
+  alvo.addEventListener("dragleave", () => alvo.classList.remove("alvo"));
+  alvo.addEventListener("drop", (e) => {
+    if (!e.dataTransfer.files.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    alvo.classList.remove("alvo");
+    aoSoltar(e.dataTransfer.files[0]);
+  });
+}
+
+// ---------- Etapa 3: páginas da história ----------
 function renderizarPaginas() {
-  const paginas = livroAtual.paginas;
+  const paginas = montado.historia;
   const lista = $("#lista-paginas");
   lista.replaceChildren();
-  for (const id of ["#btn-imprimir", "#btn-frentes", "#btn-versos"]) $(id).disabled = paginas.length === 0;
-
-  // Onde cada página vai sair: número da página -> "Folha 2 · Verso"
-  const onde = {};
-  if (paginas.length) {
-    montarFolhas(paginas.length, livroAtual.modo).folhas.forEach((f, i) => {
-      for (const n of f.frente) onde[n] = `Folha ${i + 1} · Frente`;
-      for (const n of f.verso) onde[n] = `Folha ${i + 1} · Verso`;
-    });
-  }
+  const onde = ondeSai();
 
   paginas.forEach((p, i) => {
+    const numLivro = montado.antesDaHistoria + i + 1;
     const marca = i === 0 ? "▶ Início" : i === paginas.length - 1 ? "Fim ■" : null;
     const item = el("li", { class: "pagina", draggable: "true", "data-id": p.id, title: p.nome },
       el("span", { class: "num" }, String(i + 1)),
@@ -228,8 +333,9 @@ function renderizarPaginas() {
         p.vazia
           ? botao("✖️", "Remover", "Tirar esta página do livro", () => removerPagina(p), "perigo")
           : botao("🗑️", "Apagar", "Apagar a imagem (a página fica em branco)", () => apagarImagem(p), "perigo"),
-        !p.vazia && botao("🖨️", "Imprimir", "Imprimir só esta página", () => escolherImpressaoUnica(i + 1), "imprimir-uma")),
-      el("div", { class: "onde", title: "Onde esta página vai ser impressa no livro" }, "📍 ", onde[i + 1]));
+        !p.vazia && botao("🖨️", "Imprimir", "Imprimir só esta página", () => escolherImpressaoUnica(numLivro), "imprimir-uma")),
+      el("div", { class: "onde", title: "Onde esta página vai ser impressa no livro" },
+        "📍 ", `Pág. ${numLivro} · ${onde[numLivro]}`));
     ligarArrastarPagina(item);
     lista.append(item);
   });
@@ -260,32 +366,34 @@ function ligarArrastarPagina(item) {
       e.preventDefault();
       e.stopPropagation();
       item.classList.remove("alvo");
-      const pagina = livroAtual.paginas.find((p) => p.id === Number(item.dataset.id));
+      const pagina = montado.historia.find((p) => p.id === Number(item.dataset.id));
       trocarImagem(pagina, e.dataTransfer.files[0]);
       return;
     }
     if (idArrastado === null) return;
     e.preventDefault();
     e.stopPropagation();
-    const ids = livroAtual.paginas.map((p) => p.id);
+    const ids = montado.historia.map((p) => p.id);
     mover(ids.indexOf(idArrastado), ids.indexOf(Number(item.dataset.id)));
   });
 }
 
 async function mover(de, para) {
-  const paginas = [...livroAtual.paginas];
-  if (para < 0 || para >= paginas.length || de === para) return;
-  const [p] = paginas.splice(de, 1);
-  paginas.splice(para, 0, p);
-  livroAtual.paginas = paginas;
-  renderizarPaginas();
-  renderizarPrevia();
-  livroAtual = await armazem.reordenar(livroAtual.id, paginas.map((x) => x.id));
+  const historia = [...montado.historia];
+  if (para < 0 || para >= historia.length || de === para) return;
+  const [p] = historia.splice(de, 1);
+  historia.splice(para, 0, p);
+  // Mostra na hora; a capa e a contracapa não entram na ordem
+  livroAtual.paginas = [...livroAtual.paginas.filter((x) => !ehHistoria(x)), ...historia];
+  renderizarLivro();
+  livroAtual = await armazem.reordenar(livroAtual.id, historia.map((x) => x.id));
 }
+
+const numeroNaHistoria = (p) => montado.historia.indexOf(p) + 1;
 
 // Apaga só a imagem: a página fica em branco e nenhuma outra muda de lugar
 async function apagarImagem(p) {
-  const num = livroAtual.paginas.indexOf(p) + 1;
+  const num = numeroNaHistoria(p);
   if (!confirm(`Apagar a imagem da página ${num}? A página fica em branco e as outras não mudam de lugar.`)) return;
   await armazem.apagarImagem(p.id);
   await abrirLivro(livroAtual.id);
@@ -293,30 +401,30 @@ async function apagarImagem(p) {
 
 // Tira a página do livro (as seguintes sobem uma posição)
 async function removerPagina(p) {
-  const num = livroAtual.paginas.indexOf(p) + 1;
-  const ultima = num === livroAtual.paginas.length;
+  const num = numeroNaHistoria(p);
+  const ultima = num === montado.historia.length;
   const aviso = ultima ? "" : " Atenção: as páginas depois dela vão voltar uma posição.";
   if (!confirm(`Remover a página ${num} do livro?${aviso}`)) return;
   await armazem.removerPagina(p.id);
   await abrirLivro(livroAtual.id);
 }
 
-// Trocar a imagem de uma página (mantém a posição)
 function escolherArquivo(aoEscolher) {
-  const entrada = el("input", { type: "file", accept: "image/*" });
-  entrada.addEventListener("change", () => {
-    if (entrada.files[0]) aoEscolher(entrada.files[0]);
+  const entradaArquivo = el("input", { type: "file", accept: "image/*" });
+  entradaArquivo.addEventListener("change", () => {
+    if (entradaArquivo.files[0]) aoEscolher(entradaArquivo.files[0]);
   });
-  entrada.click();
+  entradaArquivo.click();
 }
 
-// Coloca a imagem exatamente na página "num". Se a página ainda não existe,
-// cria páginas em branco até chegar nela.
+// Coloca a imagem exatamente na página "num" do livro montado.
+// Se for um dos brancos que completam a folha, cria páginas em branco na história até chegar nele.
 async function colocarNaPosicao(num, arquivo) {
-  const pagina = livroAtual.paginas[num - 1];
-  if (pagina) return trocarImagem(pagina, arquivo);
+  const e = entrada(num);
+  if (e.pagina) return trocarImagem(e.pagina, arquivo);
+  if (e.tipo !== "branco") return;
   if (!arquivo.type.startsWith("image/")) return alert("Escolha um arquivo de imagem.");
-  const faltam = num - 1 - livroAtual.paginas.length;
+  const faltam = num - 1 - (montado.antesDaHistoria + montado.historia.length);
   for (let i = 0; i < faltam; i++) await criarPaginaVazia();
   await enviarArquivos([arquivo]);
 }
@@ -332,20 +440,20 @@ $("#btn-pagina-branca").addEventListener("click", async () => {
 
 async function trocarImagem(pagina, arquivo) {
   if (!arquivo.type.startsWith("image/")) return alert("Escolha um arquivo de imagem.");
-  const num = livroAtual.paginas.indexOf(pagina) + 1;
+  const e = montado.seq.find((x) => x.pagina === pagina);
   const status = $("#status-envio");
   status.hidden = false;
-  status.textContent = `Trocando a imagem da página ${num}…`;
+  status.textContent = `Trocando a imagem (${e ? nomeDaPagina(e).toLowerCase() : "página"})…`;
   try {
     await armazem.trocarImagem(pagina.id, arquivo);
     status.hidden = true;
-  } catch (e) {
-    status.textContent = `Erro ao trocar: ${e.message}`;
+  } catch (err) {
+    status.textContent = `Erro ao trocar: ${err.message}`;
   }
   await abrirLivro(livroAtual.id);
 }
 
-// Envio de imagens
+// Envio de imagens (entram na história, na ordem do nome do arquivo)
 async function enviarArquivos(arquivos) {
   const imagens = [...arquivos]
     .filter((f) => f.type.startsWith("image/"))
@@ -384,7 +492,7 @@ zona.addEventListener("drop", (e) => {
   zona.classList.remove("arrastando");
   enviarArquivos(e.dataTransfer.files);
 });
-// Soltar imagens em qualquer lugar da tela do livro também funciona
+// Soltar imagens em qualquer lugar da tela do livro também funciona (entram na história)
 document.addEventListener("dragover", (e) => {
   if (livroAtual && e.dataTransfer.types.includes("Files")) e.preventDefault();
 });
@@ -428,7 +536,7 @@ $("#btn-excluir-livro").addEventListener("click", async () => {
 // ---------- Desenho das folhas ----------
 // interativo = prévia na tela (aceita clique e imagens soltas); falso = impressão
 function criarLado(numeros, interativo) {
-  const { paginas, ajuste, margem_mm } = livroAtual;
+  const { ajuste, margem_mm } = livroAtual;
   const g = geometria();
   const folha = el("div", { class: `folha ${ajuste} ${g.arranjo}` });
   folha.style.setProperty("--fl", g.folhaL);
@@ -436,62 +544,55 @@ function criarLado(numeros, interativo) {
   // margem em % da largura da folha (padding em % é sempre relativo à largura)
   folha.style.setProperty("--margem-pct", `${(margem_mm / g.folhaL) * 100}%`);
   for (const num of numeros) {
-    const pagina = num ? paginas[num - 1] : null; // num nulo = metade vazia (impressão de uma página)
-    const temImagem = pagina && !pagina.vazia;
+    const e = entrada(num); // num nulo = metade vazia (impressão de uma página)
+    const temImagem = e?.pagina && !e.pagina.vazia;
     const metade = el("div", { class: temImagem ? "metade" : "metade branco" });
-    if (temImagem) metade.append(el("img", { src: imagemUrl(pagina.img_id), alt: "" }));
-    if (interativo) ligarMetade(metade, num, pagina, temImagem);
-    else if (livroAtual.numerar && num) metade.append(el("span", { class: "numero-impresso" }, String(num)));
+    if (temImagem) metade.append(el("img", { src: imagemUrl(e.pagina.img_id), alt: "" }));
+    if (interativo) ligarMetade(metade, e, temImagem);
+    else if (livroAtual.numerar && numeroImpresso(e)) metade.append(el("span", { class: "numero-impresso" }, String(e.num)));
     folha.append(metade);
   }
   return folha;
 }
 
-function ligarMetade(metade, num, pagina, temImagem) {
+function ligarMetade(metade, e, temImagem) {
+  metade.append(el("span", { class: "rotulo" }, nomeDaPagina(e)));
+  // Verso da capa/contracapa em branco: fica assim de propósito (opção da etapa 2)
+  if (e.tipo === "verso-capa" || e.tipo === "verso-contracapa") {
+    metade.append(el("span", { class: "convite" }, "em branco", el("small", {}, "(opção da etapa 2)")));
+    return;
+  }
   metade.classList.add("interativa");
   metade.title = temImagem
-    ? `Clique ou solte uma imagem aqui para trocar a página ${num}`
-    : `Clique ou solte uma imagem aqui para colocar na página ${num}`;
+    ? `Clique ou solte uma imagem aqui para trocar (${nomeDaPagina(e).toLowerCase()})`
+    : `Clique ou solte uma imagem aqui para colocar na página ${e.num}`;
   if (!temImagem) metade.append(el("span", { class: "convite" }, el("span", { class: "icone" }, "➕"), "Página em branco"));
-  metade.append(el("span", { class: "rotulo" }, `Pág. ${num}`));
-  metade.addEventListener("click", () => escolherArquivo((arq) => colocarNaPosicao(num, arq)));
-  metade.addEventListener("dragover", (e) => {
-    if (!e.dataTransfer.types.includes("Files")) return;
-    e.preventDefault();
-    metade.classList.add("alvo");
-  });
-  metade.addEventListener("dragleave", () => metade.classList.remove("alvo"));
-  metade.addEventListener("drop", (e) => {
-    if (!e.dataTransfer.files.length) return;
-    e.preventDefault();
-    e.stopPropagation();
-    metade.classList.remove("alvo");
-    colocarNaPosicao(num, e.dataTransfer.files[0]);
-  });
+  metade.addEventListener("click", () => escolherArquivo((arq) => colocarNaPosicao(e.num, arq)));
+  ligarSoltarImagem(metade, (arq) => colocarNaPosicao(e.num, arq));
 }
 
 function renderizarPrevia() {
   const previa = $("#previa-folhas");
   previa.replaceChildren();
-  const total = livroAtual.paginas.length;
   const aviso = $("#aviso-branco");
-  if (!total) {
+  if (!montado.seq.length) {
     aviso.hidden = true;
     previa.append(el("p", { class: "dica" }, "Adicione imagens para ver as folhas."));
     return;
   }
-  const { folhas, totalComBrancos } = montarFolhas(total, livroAtual.modo);
-  const brancos = totalComBrancos - total;
+  const brancos = montado.brancos;
   aviso.hidden = brancos === 0;
-  aviso.textContent = `Cada folha tem ${paginasPorFolha(livroAtual.modo)} páginas. ` +
-    `Com ${total} página(s), ${brancos} página(s) no final vão ficar em branco. ` +
-    `Adicione mais ${brancos} imagem(ns) para completar.`;
+  aviso.textContent = `Cada folha tem ${paginasPorFolha(livroAtual.modo)} páginas, então faltam ${brancos} página(s) ` +
+    `para completar a última folha. Elas vão ficar em branco ` +
+    (montado.contracapa ? "antes da contracapa. " : "no final do livro. ") +
+    `Adicione mais ${brancos} imagem(ns) na história para completar.`;
   const g = geometria();
-  const nomeLado = (nums) => nums.length === 1 ? `página ${nums[0]}`
-    : g.arranjo === "empilhada" ? `página ${nums[0]} em cima e ${nums[1]} embaixo`
-    : `páginas ${nums.join(" e ")}`;
+  const nome = (n) => nomeDaPagina(entrada(n)).replace("Pág. ", "página ");
+  const nomeLado = (nums) => nums.length === 1 ? nome(nums[0])
+    : g.arranjo === "empilhada" ? `${nome(nums[0])} em cima e ${nome(nums[1])} embaixo`
+    : `${nome(nums[0])} e ${nome(nums[1])}`;
 
-  folhas.forEach((f, i) => {
+  montado.folhas.forEach((f, i) => {
     previa.append(
       el("div", { class: "previa-folha" },
         el("div", { class: "cabecalho-folha" },
@@ -515,14 +616,17 @@ function ladoPrevia(titulo, numeros) {
 }
 
 function botoesDaMetade(num) {
-  const pagina = livroAtual.paginas[num - 1];
-  const grupo = el("div", { class: "grupo" }, el("b", { class: "grupo-rotulo" }, `Pág. ${num}`));
-  if (pagina && !pagina.vazia) {
+  const e = entrada(num);
+  const grupo = el("div", { class: "grupo" }, el("b", { class: "grupo-rotulo" }, nomeDaPagina(e)));
+  if (e.tipo === "verso-capa" || e.tipo === "verso-contracapa") {
+    grupo.append(el("span", { class: "dica" }, "em branco (opção da etapa 2)"));
+  } else if (e.pagina && !e.pagina.vazia) {
     grupo.append(
-      botao("🔄", "Trocar", `Trocar a imagem da página ${num}`,
+      botao("🔄", "Trocar", `Trocar a imagem (${nomeDaPagina(e).toLowerCase()})`,
         () => escolherArquivo((arq) => colocarNaPosicao(num, arq))),
-      botao("🗑️", "Apagar", `Apagar a imagem da página ${num} (fica em branco)`,
-        () => apagarImagem(pagina), "perigo"));
+      e.tipo === "historia"
+        ? botao("🗑️", "Apagar", `Apagar a imagem da página ${num} (fica em branco)`, () => apagarImagem(e.pagina), "perigo")
+        : botao("🗑️", "Tirar", `Tirar a ${e.tipo} do livro`, () => tirarCapa(e.tipo), "perigo"));
   } else {
     grupo.append(botao("➕", "Colocar imagem", `Colocar uma imagem na página ${num}`,
       () => escolherArquivo((arq) => colocarNaPosicao(num, arq)), "primario"));
@@ -532,13 +636,12 @@ function botoesDaMetade(num) {
 
 // ---------- Impressão ----------
 async function imprimir(quais) {
-  if (!livroAtual.paginas.length) return;
-  const { folhas } = montarFolhas(livroAtual.paginas.length, livroAtual.modo);
+  if (!montado.seq.length) return;
   const lados = [];
-  if (quais === "tudo") folhas.forEach((f) => lados.push(f.frente, f.verso));
-  if (quais === "frentes") folhas.forEach((f) => lados.push(f.frente));
+  if (quais === "tudo") montado.folhas.forEach((f) => lados.push(f.frente, f.verso));
+  if (quais === "frentes") montado.folhas.forEach((f) => lados.push(f.frente));
   if (quais === "versos") {
-    folhas.forEach((f) => lados.push(f.verso));
+    montado.folhas.forEach((f) => lados.push(f.verso));
     if ($("#inverter-versos").checked) lados.reverse();
   }
 
@@ -567,18 +670,18 @@ async function mandarImprimir(folhas, tamanho = tamanhoDaFolha()) {
   }
 }
 
-// ---------- Imprimir uma página só ----------
+// ---------- Imprimir uma página só (num = posição no livro) ----------
 function escolherImpressaoUnica(num) {
   const g = geometria();
   // Folhas soltas: a página já ocupa a folha toda, não tem o que escolher
   if (!g.dobrada) return imprimirNoTamanhoDoLivro(num);
-  const pagina = livroAtual.paginas[num - 1];
+  const e = entrada(num);
   const janela = $("#janela-geral");
   const fechar = () => janela.close();
   janela.replaceChildren(
     el("button", { class: "btn fechar", onclick: fechar }, el("span", { class: "icone" }, "✖️"), "Fechar"),
-    el("h2", {}, `🖨️ Imprimir a página ${num}`),
-    el("img", { class: "miniatura-unica", src: imagemUrl(pagina.img_id), alt: "" }),
+    el("h2", {}, `🖨️ Imprimir: ${nomeDaPagina(e).replace("Pág.", "página")}`),
+    el("img", { class: "miniatura-unica", src: imagemUrl(e.pagina.img_id), alt: "" }),
     el("div", { class: "acoes-sync" },
       botao("📄", `Folha inteira (${g.nomePapel} ${g.deitada ? "deitada" : "em pé"})`, "A página ocupa a folha toda: bom para colorir avulsa",
         () => { fechar(); imprimirPaginaInteira(num); }, "primario grande"),
@@ -590,7 +693,8 @@ function escolherImpressaoUnica(num) {
 }
 
 function imprimirPaginaInteira(num) {
-  const { paginas, ajuste, margem_mm, numerar } = livroAtual;
+  const { ajuste, margem_mm, numerar } = livroAtual;
+  const e = entrada(num);
   const g = geometria();
   // A folha toda, na mesma orientação das páginas do livro
   const tamanho = g.deitada ? { larg: g.longo, alt: g.curto } : { larg: g.curto, alt: g.longo };
@@ -598,15 +702,14 @@ function imprimirPaginaInteira(num) {
   folha.style.setProperty("--fl", tamanho.larg);
   folha.style.setProperty("--fa", tamanho.alt);
   folha.style.setProperty("--margem-mm", Math.max(8, margem_mm));
-  folha.append(el("img", { src: imagemUrl(paginas[num - 1].img_id), alt: "" }));
-  if (numerar) folha.append(el("span", { class: "numero-impresso" }, String(num)));
+  folha.append(el("img", { src: imagemUrl(e.pagina.img_id), alt: "" }));
+  if (numerar && numeroImpresso(e)) folha.append(el("span", { class: "numero-impresso" }, String(e.num)));
   mandarImprimir([folha], tamanho);
 }
 
 function imprimirNoTamanhoDoLivro(num) {
   // Descobre em que lado de qual folha a página fica e imprime só ela, na mesma metade
-  const { folhas } = montarFolhas(livroAtual.paginas.length, livroAtual.modo);
-  const lado = folhas.flatMap((f) => [f.frente, f.verso]).find((l) => l.includes(num));
+  const lado = montado.folhas.flatMap((f) => [f.frente, f.verso]).find((l) => l.includes(num));
   mandarImprimir([criarLado(lado.map((n) => (n === num ? n : null)), false)]);
 }
 $("#btn-imprimir").addEventListener("click", () => imprimir("tudo"));
@@ -622,7 +725,7 @@ if (NO_CELULAR) {
 
 // No PC: se o programa foi atualizado mas o servidor antigo continua rodando,
 // a tela nova não funciona direito. Avisa para fechar e abrir de novo.
-const VERSAO_SERVIDOR_NECESSARIA = 3;
+const VERSAO_SERVIDOR_NECESSARIA = 4;
 async function conferirServidor() {
   if (NO_CELULAR) return;
   const v = await fetch("/api/versao").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
