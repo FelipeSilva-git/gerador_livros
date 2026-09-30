@@ -42,8 +42,12 @@ const paginasPorFolha = (modo) => (modo === "soltas" ? 2 : 4);
 // (dobra horizontal; o livro abre para cima, como um calendário).
 // Folhas soltas: uma página por lado, a folha fica como a página.
 function geometria(livro = livroAtual) {
-  const curto = Math.min(livro.papel_larg, livro.papel_alt);
-  const longo = Math.max(livro.papel_larg, livro.papel_alt);
+  // Medida que não veio (servidor antigo ainda rodando, livro antigo): usa a do papel escolhido, ou A4
+  const papel = PAPEIS[livro.papel] || PAPEIS.A4;
+  const larg = Number(livro.papel_larg) > 0 ? Number(livro.papel_larg) : papel.larg;
+  const alt = Number(livro.papel_alt) > 0 ? Number(livro.papel_alt) : papel.alt;
+  const curto = Math.min(larg, alt);
+  const longo = Math.max(larg, alt);
   const deitada = livro.orientacao === "paisagem";
   const dobrada = livro.modo !== "soltas";
   const g = {
@@ -616,4 +620,18 @@ if (NO_CELULAR) {
   $("#zona-titulo").textContent = "Toque aqui para escolher as imagens";
 }
 
+// No PC: se o programa foi atualizado mas o servidor antigo continua rodando,
+// a tela nova não funciona direito. Avisa para fechar e abrir de novo.
+const VERSAO_SERVIDOR_NECESSARIA = 3;
+async function conferirServidor() {
+  if (NO_CELULAR) return;
+  const v = await fetch("/api/versao").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+  if ((v.versao || 0) >= VERSAO_SERVIDOR_NECESSARIA) return;
+  document.body.prepend(el("div", { class: "aviso-servidor", role: "alert" },
+    el("span", { class: "icone" }, "⚠️"),
+    el("span", {}, el("b", {}, "O Livrinhos foi atualizado. "),
+      "Feche a janela preta do Livrinhos e abra de novo (ou reinicie o computador) para terminar a atualização.")));
+}
+
+conferirServidor();
 roteador();

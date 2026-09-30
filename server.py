@@ -32,6 +32,8 @@ BANCO = PASTA / "historias.db"
 ESTATICOS = PASTA / "static"
 
 VERSAO_BANCO = 3
+# Sobe junto com mudanças que a tela precisa; a tela avisa se o servidor rodando for mais velho
+VERSAO_SERVIDOR = 3
 MODOS = {"livreto", "empilhado", "soltas"}  # soltas = sem dobrar, 1 página por lado
 AJUSTES = {"inteira", "preencher"}
 ORIENTACOES = {"retrato", "paisagem"}      # páginas em pé ou deitadas
@@ -346,6 +348,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.autorizado():
             return
+
+        if self.rota(r"/api/versao"):
+            return self.responder_json({"versao": VERSAO_SERVIDOR})
 
         if self.rota(r"/api/livros"):
             with conectar() as con:

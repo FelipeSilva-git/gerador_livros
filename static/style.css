@@ -348,7 +348,7 @@ details.etapa[open] .quando-fechado, details.etapa:not([open]) .quando-aberto { 
 .barra-ferramentas .dica { margin: 0; }
 
 /* Botões grandes de escolha (rádio escondido, o cartão todo é clicável) */
-.escolhas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.escolhas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; padding-top: 6px; }
 .escolha {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   min-height: 84px; padding: 10px; text-align: center; cursor: pointer;
@@ -360,8 +360,10 @@ details.etapa[open] .quando-fechado, details.etapa:not([open]) .quando-aberto { 
 .escolha span, .escolha small { color: var(--suave); font-size: .92rem; line-height: 1.25; }
 .escolha:has(input:checked) { border-color: var(--destaque); background: #fff1ea; box-shadow: 0 0 0 2px var(--destaque) inset; }
 .escolha:has(input:checked)::after {
-  content: "✔"; position: absolute; top: 6px; right: 8px; width: 28px; height: 28px; border-radius: 50%;
+  /* selo na quina, para fora da borda: não fica em cima do texto */
+  content: "✔"; position: absolute; top: -13px; right: -13px; width: 30px; height: 30px; border-radius: 50%;
   display: grid; place-items: center; background: var(--destaque); color: #fff; font-weight: 800; font-size: 1rem;
+  border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); z-index: 1;
 }
 .escolha:has(input:focus-visible) { outline: 4px solid #1f6feb; outline-offset: 2px; }
 .escolha-grande { min-height: 130px; }
@@ -382,6 +384,12 @@ details.etapa[open] .quando-fechado, details.etapa:not([open]) .quando-aberto { 
 .passo-meio { text-align: center; }
 .dica-janela { font-size: 1rem; background: #eaf3ff; border-left: 6px solid #1f6feb; border-radius: 8px; padding: 10px 12px; }
 .excluir-livro { width: 100%; }
+
+.aviso-servidor {
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; background: #b02a2a; color: #fff; font-size: 1.15rem;
+}
+.aviso-servidor .icone { font-size: 1.8rem; }
 
 .impressao { display: none; }
 .numero-impresso {
