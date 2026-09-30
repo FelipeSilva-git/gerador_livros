@@ -33,7 +33,7 @@ ESTATICOS = PASTA / "static"
 
 VERSAO_BANCO = 3
 # Sobe junto com mudanças que a tela precisa; a tela avisa se o servidor rodando for mais velho
-VERSAO_SERVIDOR = 4
+VERSAO_SERVIDOR = 5
 MODOS = {"livreto", "empilhado", "soltas"}  # soltas = sem dobrar, 1 página por lado
 AJUSTES = {"inteira", "preencher"}
 ORIENTACOES = {"retrato", "paisagem"}      # páginas em pé ou deitadas
@@ -584,6 +584,35 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 tocar(con, pag["livro_id"])
                 limpar_imagens_soltas(con)
+            return self.responder_json({"ok": True})
+
+        # Mudar a página de lugar no livro: {"secao": "capa" | "contracapa" | "historia"}
+        # Ex.: livro antigo usa a página 1 como capa; ou a capa volta para a história.
+        if m := self.rota(r"/api/paginas/(\d+)/secao"):
+            secao = self.ler_json().get("secao")
+            if secao not in SECOES:
+                return self.erro(HTTPStatus.BAD_REQUEST, "Lugar inválido")
+            with _trava, conectar() as con:
+                pag = con.execute("SELECT livro_id FROM paginas WHERE id = ?", (int(m[1]),)).fetchone()
+                if pag is None:
+                    return self.erro(HTTPStatus.NOT_FOUND, "Página não encontrada")
+                livro_id = pag["livro_id"]
+                if secao == "historia":
+                    # volta para a história: a capa no começo, a contracapa no fim
+                    atual = con.execute("SELECT secao FROM paginas WHERE id = ?", (int(m[1]),)).fetchone()["secao"]
+                    funcao = "MIN(ordem) - 1" if atual == "capa" else "MAX(ordem) + 1"
+                    (ordem,) = con.execute(
+                        f"SELECT COALESCE({funcao}, 1) FROM paginas WHERE livro_id = ? AND secao = 'historia'",
+                        (livro_id,),
+                    ).fetchone()
+                    con.execute("UPDATE paginas SET secao = 'historia', ordem = ? WHERE id = ?", (ordem, int(m[1])))
+                else:
+                    # só existe uma capa e uma contracapa: a que já estava volta para a história
+                    con.execute(
+                        "UPDATE paginas SET secao = 'historia' WHERE livro_id = ? AND secao = ?", (livro_id, secao)
+                    )
+                    con.execute("UPDATE paginas SET secao = ? WHERE id = ?", (secao, int(m[1])))
+                tocar(con, livro_id)
             return self.responder_json({"ok": True})
 
         # Reordenar páginas: {"ids": [5, 2, 9, ...]}

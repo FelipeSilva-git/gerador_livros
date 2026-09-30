@@ -75,6 +75,7 @@ const ArmazemServidor = (() => {
     trocarImagem: (paginaId, arq) => api("PUT", `/api/paginas/${paginaId}/imagem`, arq, cabecalhosArquivo(arq)),
     apagarImagem: (paginaId) => api("DELETE", `/api/paginas/${paginaId}/imagem`),
     removerPagina: (paginaId) => api("DELETE", `/api/paginas/${paginaId}`),
+    mudarSecao: (paginaId, secao) => api("PUT", `/api/paginas/${paginaId}/secao`, { secao }),
   };
 })();
 
@@ -272,6 +273,26 @@ const ArmazemLocal = (() => {
     async removerPagina(paginaId) {
       const p = await paginaELivro(paginaId);
       await alterarLivro(p.livro_id, ({ paginas }) => { paginas.delete(paginaId); });
+    },
+
+    // Muda a página de lugar no livro (história, capa ou contracapa)
+    async mudarSecao(paginaId, secao) {
+      if (!SECOES.includes(secao)) throw new Error("Lugar inválido");
+      const p = await paginaELivro(paginaId);
+      await alterarLivro(p.livro_id, async ({ paginas }) => {
+        const pags = await paginasDoLivro(paginas, p.livro_id);
+        const historia = pags.filter((x) => (x.secao || "historia") === "historia");
+        if (secao === "historia") {
+          // volta para a história: a capa no começo, a contracapa no fim
+          const ordens = historia.map((x) => x.ordem);
+          const ordem = !ordens.length ? 1 : p.secao === "capa" ? Math.min(...ordens) - 1 : Math.max(...ordens) + 1;
+          paginas.put({ ...p, secao: "historia", ordem });
+        } else {
+          // só existe uma capa e uma contracapa: a que já estava volta para a história
+          for (const x of pags) if (x.secao === secao && x.id !== p.id) paginas.put({ ...x, secao: "historia" });
+          paginas.put({ ...p, secao });
+        }
+      });
     },
 
     // ----- usados pela sincronização -----

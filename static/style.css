@@ -440,6 +440,10 @@ details.etapa[open] .quando-fechado, details.etapa:not([open]) .quando-aberto { 
 .espaco-capa .acoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .espaco-capa .acoes .btn { flex: 1 1 110px; min-height: 48px; font-size: 1rem; }
 .metade .convite small { font-weight: normal; font-size: .8rem; }
+.espaco-capa .mover-secao { width: 100%; margin-top: 6px; min-height: 48px; font-size: 1rem; }
+.aproveitar { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px; background: #fff; border: 2px dashed var(--destaque); border-radius: 10px; }
+.aproveitar img { width: 56px; aspect-ratio: var(--pag-aspect, 148.5 / 210); object-fit: contain; border: 1px solid var(--borda); background: #fff; }
+.aproveitar .btn { flex: 1; min-height: 52px; font-size: 1rem; }
 
 .impressao { display: none; }
 .numero-impresso {

@@ -272,8 +272,29 @@ function renderizarCapas() {
           : botao("➕", `Colocar ${secao}`, `Colocar a imagem da ${secao}`, escolher, "primario"),
         pagina && botao("🗑️", "Tirar", `Tirar a ${secao} do livro`, () => tirarCapa(secao), "perigo"),
         pagina && botao("🖨️", "Imprimir", `Imprimir só a ${secao}`, () => escolherImpressaoUnica(e.num))),
+      pagina
+        ? botao("↩️", "Voltar para a história", secao === "capa"
+          ? "A capa vira a primeira página da história" : "A contracapa vira a última página da história",
+          () => mudarSecao(pagina, "historia"), "mover-secao")
+        : aproveitarDaHistoria(secao),
       el("label", { class: "linha" }, verso, info.nomeVerso));
   }
+}
+
+// Livro antigo (sem capa separada): usa a primeira/última página da história, sem enviar de novo
+function aproveitarDaHistoria(secao) {
+  const historia = montado.historia;
+  const candidata = secao === "capa" ? historia[0] : historia[historia.length - 1];
+  if (!candidata || candidata.vazia || historia.length < 2) return null;
+  const texto = secao === "capa" ? "Usar a página 1 da história como capa" : `Usar a última página (${historia.length}) como contracapa`;
+  return el("div", { class: "aproveitar" },
+    el("img", { src: imagemUrl(candidata.img_id), alt: "" }),
+    botao(secao === "capa" ? "⬆️" : "⬇️", texto, "A página sai da história e vira a " + secao, () => mudarSecao(candidata, secao), "primario"));
+}
+
+async function mudarSecao(pagina, secao) {
+  await armazem.mudarSecao(pagina.id, secao);
+  await abrirLivro(livroAtual.id);
 }
 
 async function colocarCapa(secao, arquivo) {
@@ -725,7 +746,7 @@ if (NO_CELULAR) {
 
 // No PC: se o programa foi atualizado mas o servidor antigo continua rodando,
 // a tela nova não funciona direito. Avisa para fechar e abrir de novo.
-const VERSAO_SERVIDOR_NECESSARIA = 4;
+const VERSAO_SERVIDOR_NECESSARIA = 5;
 async function conferirServidor() {
   if (NO_CELULAR) return;
   const v = await fetch("/api/versao").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
