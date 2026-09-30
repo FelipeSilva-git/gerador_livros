@@ -277,8 +277,9 @@ details .btn { width: 100%; margin-top: 6px; }
 .vis-topo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .vis-topo h2 { flex: 1; margin: 0; }
 .vis-indicador { font-size: 1.2rem; background: var(--texto); color: #fff; padding: 6px 16px; border-radius: 10px; }
+.vis-area { flex: 1; min-height: 0; position: relative; display: flex; }
 .vis-palco {
-  flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden;
+  flex: 1; min-width: 0; min-height: 0; display: grid; place-items: center; overflow: hidden;
   perspective: 2200px; touch-action: none; user-select: none; cursor: grab;
 }
 .vis-palco:active { cursor: grabbing; }
@@ -320,6 +321,34 @@ details .btn { width: 100%; margin-top: 6px; }
 .vis-controles { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .vis-controles .btn.grande { width: auto; min-width: 170px; }
 .vis-dica { text-align: center; margin: 0; }
+.ind-curto, .vis-zoom-topo, .vis-seta { display: none; }
+.vis-seta {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  width: 64px; height: 64px; border-radius: 50%; border: 3px solid #fff; cursor: pointer;
+  background: rgba(212, 86, 31, .92); color: #fff; font-size: 1.7rem; line-height: 1;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35); place-items: center;
+}
+.vis-seta.esq { left: 4px; }
+.vis-seta.dir { right: 4px; }
+.vis-seta:disabled { opacity: .25; cursor: default; }
+
+/* Celular (em pé ou deitado): o livro ocupa a tela, botões só com ícone */
+@media (max-width: 700px), (max-height: 520px) {
+  .visualizador { padding: 6px 6px 8px; gap: 4px; }
+  .vis-topo { flex-wrap: nowrap; gap: 6px; }
+  .vis-topo h2 { font-size: 1rem; flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vis-indicador { font-size: .95rem; padding: 6px 10px; white-space: nowrap; }
+  .ind-longo { display: none; }
+  .ind-curto { display: inline; }
+  .vis-zoom-topo { display: flex; gap: 6px; }
+  .vis-topo .btn { min-height: 46px; min-width: 46px; padding: 4px 8px; }
+  .vis-topo .btn-texto { display: none; }
+  .vis-controles, .vis-dica { display: none; }
+  .vis-seta { display: grid; width: 54px; height: 54px; font-size: 1.4rem; background: rgba(212, 86, 31, .85); }
+}
+@media (max-width: 420px) {
+  .vis-topo h2 { display: none; }
+}
 
 /* ---------- Etapas da tela do livro ---------- */
 .etapa {

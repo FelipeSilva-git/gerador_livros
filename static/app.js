@@ -9,7 +9,7 @@ function botao(icone, texto, dica, aoClicar, classe = "") {
   return el("button", {
     class: `btn ${classe}`, title: dica,
     onclick: (e) => { e.stopPropagation(); aoClicar(); },
-  }, el("span", { class: "icone" }, icone), texto);
+  }, el("span", { class: "icone" }, icone), texto ? el("span", { class: "btn-texto" }, texto) : null);
 }
 
 function el(tag, attrs = {}, ...filhos) {

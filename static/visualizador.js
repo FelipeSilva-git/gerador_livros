@@ -17,7 +17,10 @@ const vis = {
   ry: 0,        // giro para os lados
 };
 
+// Telas pequenas (celular, principalmente deitado): menos inclinação, que "achata" o livro
+const telaPequena = () => matchMedia("(max-width: 700px), (max-height: 520px)").matches;
 const VISTA_INICIAL = { zoom: 1, rx: 18, ry: 0 };
+const vistaInicial = () => ({ ...VISTA_INICIAL, rx: telaPequena() ? 6 : VISTA_INICIAL.rx });
 
 function abrirVisualizador() {
   const { paginas, ajuste, margem_mm, numerar } = livroAtual;
@@ -28,7 +31,7 @@ function abrirVisualizador() {
   vis.eixo = g.dobrada && g.deitada ? "x" : "y";
   vis.aspecto = g.pagL / g.pagA;
   vis.abertas = 0;
-  Object.assign(vis, VISTA_INICIAL);
+  Object.assign(vis, vistaInicial());
 
   const face = (num, lado) => {
     const p = paginas[num - 1];
@@ -48,12 +51,21 @@ function abrirVisualizador() {
   const palco = el("div", { class: "vis-palco" }, livro);
   const indicador = el("b", { class: "vis-indicador" });
 
+  // No celular: topo fino só com ícones, setas redondas sobre o livro e o livro ocupando a tela.
+  // No computador: barra de botões com texto embaixo. O CSS escolhe qual mostrar.
   vis.janela.replaceChildren(
     el("div", { class: "vis-topo" },
       el("h2", {}, "📖 ", livroAtual.nome),
       indicador,
+      el("div", { class: "vis-zoom-topo" },
+        botao("➖", "", "Afastar", () => mudarZoom(-0.15)),
+        botao("🎯", "", "Endireitar o livro", endireitar),
+        botao("➕", "", "Aproximar", () => mudarZoom(0.15))),
       botao("✖️", "Fechar", "Fechar a visualização", () => vis.janela.close())),
-    palco,
+    el("div", { class: "vis-area" },
+      palco,
+      el("button", { class: "vis-seta esq vis-voltar", title: "Voltar uma página", onclick: () => virar(-1) }, "◀"),
+      el("button", { class: "vis-seta dir vis-avancar", title: "Avançar uma página", onclick: () => virar(1) }, "▶")),
     el("div", { class: "vis-controles" },
       botao("◀️", "Voltar", "Voltar uma página", () => virar(-1), "grande vis-voltar"),
       botao("➖", "", "Afastar", () => mudarZoom(-0.15)),
@@ -76,16 +88,28 @@ function medir() {
   const { width, height } = vis.palco.getBoundingClientRect();
   let largura, altura;
   if (vis.eixo === "y") { // páginas lado a lado
-    largura = Math.max(60, Math.min(width * 0.44, height * 0.78 * vis.aspecto));
+    largura = Math.max(60, Math.min(width * 0.46, height * (telaPequena() ? 0.92 : 0.84) * vis.aspecto));
     altura = largura / vis.aspecto;
   } else {                // páginas uma em cima da outra
-    altura = Math.max(40, Math.min(height * 0.4, (width * 0.8) / vis.aspecto));
+    altura = Math.max(40, Math.min(height * 0.43, (width * 0.86) / vis.aspecto));
     largura = altura * vis.aspecto;
   }
   vis.livro.style.setProperty("--pw", `${largura}px`);
   vis.livro.style.setProperty("--ph", `${altura}px`);
   vis.largura = largura;
   vis.altura = altura;
+  vis.espaco = { width, height };
+}
+
+// Livro fechado (capa ou contracapa) mostra só uma página: aumenta para ocupar o espaço
+function ampliarFechado() {
+  const { abertas, total, largura, altura, espaco } = vis;
+  if (abertas !== 0 && abertas !== total) return 1;
+  const aberto = vis.eixo === "y"
+    ? Math.min(espaco.width / (2 * largura), espaco.height / altura)
+    : Math.min(espaco.width / largura, espaco.height / (2 * altura));
+  const fechado = Math.min(espaco.width / largura, espaco.height / altura);
+  return Math.max(1, Math.min(1.9, (fechado / aberto) * 0.95));
 }
 
 function atualizar(animar = true) {
@@ -103,15 +127,17 @@ function atualizar(animar = true) {
   const metade = vis.eixo === "y" ? vis.largura / 2 : vis.altura / 2;
   const deslocar = abertas === 0 ? -metade : abertas === total ? metade : 0;
   livro.classList.toggle("sem-animacao", !animar);
-  livro.style.transform = `scale(${vis.zoom}) rotateX(${vis.rx}deg) rotateY(${vis.ry}deg) ` +
+  livro.style.transform = `scale(${vis.zoom * ampliarFechado()}) rotateX(${vis.rx}deg) rotateY(${vis.ry}deg) ` +
     (vis.eixo === "y" ? `translateX(${deslocar}px)` : `translateY(${deslocar}px)`);
 
-  vis.indicador.textContent =
-    abertas === 0 ? "Capa (página 1)" :
-    abertas === total ? `Contracapa (página ${vis.paginas})` :
-    `Páginas ${2 * abertas} e ${2 * abertas + 1} de ${vis.paginas}`;
-  vis.janela.querySelector(".vis-voltar").disabled = abertas === 0;
-  vis.janela.querySelector(".vis-avancar").disabled = abertas === total;
+  // texto completo (computador) e curto (celular)
+  const [longo, curto] =
+    abertas === 0 ? ["Capa (página 1)", "Capa"] :
+    abertas === total ? [`Contracapa (página ${vis.paginas})`, "Contracapa"] :
+    [`Páginas ${2 * abertas} e ${2 * abertas + 1} de ${vis.paginas}`, `Pág. ${2 * abertas}–${2 * abertas + 1} de ${vis.paginas}`];
+  vis.indicador.replaceChildren(el("span", { class: "ind-longo" }, longo), el("span", { class: "ind-curto" }, curto));
+  vis.janela.querySelectorAll(".vis-voltar").forEach((b) => { b.disabled = abertas === 0; });
+  vis.janela.querySelectorAll(".vis-avancar").forEach((b) => { b.disabled = abertas === total; });
 }
 
 function virar(passo) {
@@ -127,7 +153,7 @@ function mudarZoom(delta) {
 }
 
 function endireitar() {
-  Object.assign(vis, VISTA_INICIAL);
+  Object.assign(vis, vistaInicial());
   atualizar();
 }
 
